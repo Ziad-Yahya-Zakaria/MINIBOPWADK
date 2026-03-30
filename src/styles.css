@@ -1,0 +1,70 @@
+:root {
+  color-scheme: light dark;
+  font-family: Cairo, sans-serif;
+  background:
+    radial-gradient(circle at top right, rgba(21, 94, 239, 0.12), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.12), transparent 20%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: Cairo, sans-serif;
+}
+
+.app-loading-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+}
+
+.glass-panel {
+  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.production-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.production-grid th,
+.production-grid td {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  padding: 8px;
+  vertical-align: top;
+}
+
+.production-grid input,
+.production-grid textarea {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  resize: none;
+}
+
+.production-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.metric-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(21, 94, 239, 0.08);
+}

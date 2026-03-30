@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minibo.local/schemas/free-engine-bulk-manifest.schema.json",
+  "title": "Minibo Free Engine Bulk Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "packageId",
+    "sourceInstanceId",
+    "sourceInstanceName",
+    "periodFrom",
+    "periodTo",
+    "exportedAtUtc",
+    "entityCounts",
+    "checksum"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "packageId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceInstanceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceInstanceName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "periodFrom": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "periodTo": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "exportedAtUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "entityCounts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "checksum": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}
