@@ -11,16 +11,18 @@ import {
   Typography
 } from '@mui/material';
 import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
+import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import { useNavigate } from 'react-router-dom';
 
 import { useAppContext } from '../context/AppContext';
 
 export function LoginPage() {
-  const { login, hasUsers } = useAppContext();
+  const { login, hasUsers, importUserAccountFile } = useAppContext();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -45,9 +47,12 @@ export function LoginPage() {
             <Stack spacing={2.5}>
               <Typography variant="h4">Minibo Systems</Typography>
               <Typography color="text.secondary">
-                إدارة خطوط الإنتاج واعتمادها داخل متصفحك، مع جاهزية رفع مباشرة على Vercel.
+                إدارة خطوط الإنتاج واعتمادها داخل متصفحك، مع إمكانية استيراد ملف مستخدم موقّع.
               </Typography>
+
+              {message ? <Alert severity="success">{message}</Alert> : null}
               {error ? <Alert severity="error">{error}</Alert> : null}
+
               <TextField
                 label="اسم المستخدم"
                 value={username}
@@ -88,6 +93,36 @@ export function LoginPage() {
                 }}
               >
                 تسجيل الدخول
+              </Button>
+
+              <Button
+                component="label"
+                variant="outlined"
+                startIcon={<UploadFileRoundedIcon />}
+              >
+                استيراد ملف مستخدم
+                <input
+                  hidden
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) {
+                      return;
+                    }
+                    setBusy(true);
+                    setError(null);
+                    setMessage(null);
+                    const result = await importUserAccountFile(file);
+                    setBusy(false);
+                    if (result.ok) {
+                      setMessage(result.message);
+                    } else {
+                      setError(result.message);
+                    }
+                    event.target.value = '';
+                  }}
+                />
               </Button>
             </Stack>
           </CardContent>

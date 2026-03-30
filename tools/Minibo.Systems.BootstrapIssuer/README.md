@@ -1,25 +1,45 @@
-# Minibo Systems Bootstrap Issuer
+# Minibo Systems Account Issuer
 
-الأداة الفعلية:
+أدوات إصدار ملفات الحسابات الموقعة للمطورين.
+
+## الملفات
 
 - [issue-bootstrap.mjs](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/tools/Minibo.Systems.BootstrapIssuer/issue-bootstrap.mjs)
+- [issue-user-account.mjs](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/tools/Minibo.Systems.BootstrapIssuer/issue-user-account.mjs)
 
-## الاستخدام
-
-من جذر المشروع:
+## Bootstrap
 
 ```bash
-npm run issue:bootstrap -- --username=admin --password=1234 --targetInstance=minibo-vercel-main
+npm run issue:bootstrap -- --username=admin --password=1234 --targetInstance=minibopwadk.vercel.app
 ```
 
-## ما الذي تفعله الأداة
+## User Account
 
-- توليد `bootstrap-account.json`
-- حساب `passwordHash`
-- ربط الملف بـ `targetInstance`
-- حساب `payloadSha256`
-- توقيع الملف
+كل مستخدم يجب أن يخرج له ملف مستقل خاص به.
 
-## المرجع
+```bash
+npm run issue:user -- --username=worker1 --displayName="Worker One" --password=1234 --targetInstance=minibopwadk.vercel.app --permissions=DASHBOARD_VIEW,PRODUCTION_EDIT
+```
+
+مثال الناتج:
+
+```text
+worker1-user-account.json
+```
+
+## Developer Portal
+
+```bash
+npm run dev:developer-portal
+```
+
+ثم افتح:
+
+```text
+http://localhost:4010
+```
+
+## المراجع
 
 - [bootstrap-account.schema.json](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/docs/schemas/bootstrap-account.schema.json)
+- [user-account.schema.json](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/docs/schemas/user-account.schema.json)

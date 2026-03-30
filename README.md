@@ -1,26 +1,26 @@
 # Minibo Systems
 
-نسخة `Vercel-ready` من نظام `Minibo Systems` كتطبيق `React + TypeScript + Vite + PWA`.
+نسخة `Vercel-ready` من `Minibo Systems` مبنية بـ `React + TypeScript + Vite + PWA`.
 
 هذه النسخة تعمل بالكامل داخل المتصفح مع تخزين محلي عبر `IndexedDB`، وتدعم:
 
 - `Bootstrap Access` لأول دخول عبر `bootstrap-account.json`
-- تسجيل الدخول المحلي وتغيير كلمة المرور إجباريًا
+- تسجيل دخول محلي مع إجبار تغيير كلمة المرور
 - لوحة تحكم `Dashboard`
 - إدخال إنتاج شبيه بالإكسيل
 - الاعتمادات والتوقيعات `SVG`
 - تصدير `XLSX`
 - تصدير `PDF`
-- `Free Engine Bulk` للتبادل الدوري عبر حزم ملفات
+- `Free Engine Bulk` لتبادل البيانات بحزم ملفات
 - ثيم نهاري/ليلي
-- `PWA` مع `manifest.webmanifest` و`sw.js`
+- `PWA` عبر `manifest.webmanifest` و`sw.js`
 
 ## لماذا هذه النسخة أمامية فقط
 
-تم تنفيذها بهذه الصورة لأنك طلبت الرفع على `Vercel`. `Vercel` لا يناسب تشغيل `SQLite` كقاعدة بيانات دائمة داخل نفس المشروع، لذلك هذه النسخة تعتمد على:
+تم تنفيذها بهذه الصورة لأن الاستضافة المطلوبة كانت على `Vercel`. هذه البيئة لا تناسب تشغيل `SQLite` كقاعدة بيانات مشتركة ودائمة داخل نفس المشروع، لذلك النسخة الحالية تعتمد على:
 
 - `IndexedDB` داخل المتصفح
-- ملفات `JSON / ZIP / XLSX / PDF` للتشغيل والتبادل
+- تبادل ملفات `JSON / ZIP / XLSX / PDF`
 
 ## المتطلبات
 
@@ -34,13 +34,7 @@ npm install
 npm run dev
 ```
 
-## البناء
-
-```bash
-npm run build
-```
-
-## التحقق
+## البناء والتحقق
 
 ```bash
 npm run lint
@@ -49,86 +43,118 @@ npm run build
 
 ## أول دخول للنظام
 
-لا يوجد حساب افتراضي داخل الإنتاج. بدلاً من ذلك:
-
-1. أنشئ ملف bootstrap:
+لا يوجد حساب افتراضي ثابت داخل الإنتاج. يتم إنشاء أول حساب عبر ملف تأسيسي موقّع:
 
 ```bash
-npm run issue:bootstrap -- --username=admin --password=1234 --targetInstance=minibo-vercel-main
+npm run issue:bootstrap -- --username=admin --password=1234 --targetInstance=minibopwadk.vercel.app
 ```
 
-2. سيُنشأ ملف باسم:
+إذا كانت النسخة المنشورة تعمل على دومين مختلف، استخدم نفس القيمة الظاهرة في شاشة `Bootstrap Access` تحت `معرّف النسخة الحالية`.
+
+للاختبار فقط يمكنك استخدام:
+
+```bash
+npm run issue:bootstrap -- --username=admin --password=1234 --targetInstance=*
+```
+
+يفضل عدم استخدام `*` في الإنتاج.
+
+## ملفات المستخدمين
+
+يمكن إصدار ملف مستقل لكل مستخدم:
+
+```bash
+npm run issue:user -- --username=worker1 --displayName="Worker One" --password=1234 --targetInstance=minibopwadk.vercel.app --permissions=DASHBOARD_VIEW,PRODUCTION_EDIT
+```
+
+سيُنتج ملفًا مثل:
 
 ```text
-bootstrap-account.json
+worker1-user-account.json
 ```
 
-3. افتح التطبيق.
-4. إذا لم يكن هناك أي مستخدمين، ستظهر شاشة `Bootstrap Access`.
-5. ارفع الملف.
-6. بعد ذلك سيتم إجبار المستخدم على تغيير كلمة المرور.
+وبعد إعادة نشر النسخة الحالية، يستطيع المستخدم استيراد ملفه من شاشة تسجيل الدخول عبر زر `استيراد ملف مستخدم`.
+
+## Troubleshooting
+
+إذا ظهرت رسالة `توقيع ملف التأسيس غير صالح` على النسخة المنشورة، فالسبب الأغلب أن نسخة Vercel تعمل بحزمة قديمة.
+
+تم التحقق من الموقع الحالي `https://minibopwadk.vercel.app/bootstrap` بتاريخ `March 30, 2026` وتبين أنه ما زال يستخدم المفتاح العام القديم داخل الحزمة المنشورة، بينما المستودع الحالي يحتوي على المفتاح الجديد ومسار التحقق المحدث. الحل:
+
+1. ادفع آخر تغييرات المستودع إلى GitHub.
+2. أعد `Deploy` من Vercel.
+3. بعد اكتمال النشر، أنشئ ملف `bootstrap-account.json` جديدًا.
+4. ارفع الملف الجديد على شاشة `Bootstrap Access`.
+
+إذا لم تُعد النشر فسيظل أي ملف جديد مرفوضًا حتى لو كان توقيعه صحيحًا.
 
 ## النشر على Vercel
 
-### الخيار المباشر
-
-ارفع المشروع إلى GitHub ثم اربطه بـ Vercel.
-
-إعدادات Vercel:
+الإعدادات:
 
 - Framework Preset: `Vite`
 - Build Command: `npm run build`
 - Output Directory: `dist`
 
-ملف [`.vercelignore`](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/.vercelignore) يمنع رفع ملفات المطورين مثل `tools/` و`docs/` و`bootstrap-account.json` إلى بيئة بناء Vercel.
-
-### متغيرات البيئة
-
-يمكنك إضافة:
+متغيرات البيئة المقترحة:
 
 ```text
-VITE_INSTANCE_ID=minibo-vercel-main
-VITE_BOOTSTRAP_PUBLIC_KEY=<public-key-if-you-change-it>
+VITE_INSTANCE_ID=minibopwadk.vercel.app
+VITE_BOOTSTRAP_PUBLIC_KEY=jiAHN+2oHNWbeLpMuVPfMc5S7X5xGqFj9+gLqSahNOs=
 ```
 
-## Free Engine Bulk
-
-يمكنك من داخل التطبيق:
-
-- إنشاء حزمة تصدير لفترة معينة
-- تنزيلها كملف `zip`
-- رفعها في نسخة أخرى من Minibo Systems
-
-## ملفات مهمة
-
-- التطبيق الرئيسي: [src/App.tsx](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/App.tsx)
-- قاعدة البيانات المحلية: [src/lib/db.ts](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/lib/db.ts)
-- التشفير وbootstrap verification: [src/lib/crypto.ts](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/lib/crypto.ts)
-- PWA manifest: [public/manifest.webmanifest](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/public/manifest.webmanifest)
-- Service worker: [public/sw.js](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/public/sw.js)
-- Vercel config: [vercel.json](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/vercel.json)
+ملف [`.vercelignore`](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/.vercelignore) يمنع رفع ملفات المطورين مثل `tools/` و`docs/` و`developer-kit/` وملفات الحسابات المولدة.
 
 ## أدوات المطورين
 
-- Bootstrap issuer:
-  - [tools/Minibo.Systems.BootstrapIssuer/issue-bootstrap.mjs](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/tools/Minibo.Systems.BootstrapIssuer/issue-bootstrap.mjs)
-- Bulk verifier:
-  - [tools/Minibo.Systems.BulkPackageTool/verify-bulk-manifest.mjs](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/tools/Minibo.Systems.BulkPackageTool/verify-bulk-manifest.mjs)
+يوجد مساران:
 
-إذا أردت نسخة منفصلة للمطورين فقط:
+- الأدوات داخل المشروع الرئيسي تحت [tools](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/tools)
+- نسخة منفصلة للمطورين فقط داخل [developer-kit](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/developer-kit)
+
+لإنشاء نسخة المطورين المنفصلة:
 
 ```bash
 npm run package:developer-kit
 ```
 
-وسيتم إنشاء مجلد:
+هذه النسخة تحتوي على:
 
-```text
-developer-kit/
+- `Bootstrap Issuer`
+- `User Account Issuer`
+- `Developer Portal`
+- `Bulk verifier`
+- الـ schemas والوثائق اللازمة
+
+## بوابة المطورين
+
+بوابة المطورين هي موقع محلي منفصل لتوليد ملفات الحسابات:
+
+```bash
+npm run dev:developer-portal
 ```
 
-هذا المجلد يحتوي أدوات المطورين والسكيمات فقط، ويمكنك مشاركته مع فريق المطورين بدون دمجه مع نسخة المستخدم النهائية.
+ثم افتح:
+
+```text
+http://localhost:4010
+```
+
+ومن خلالها يمكنك إنشاء:
+
+- `bootstrap-account.json`
+- ملف مستقل لكل مستخدم بصيغة `<username>-user-account.json`
+
+## ملفات مهمة
+
+- التطبيق الرئيسي: [src/App.tsx](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/App.tsx)
+- قاعدة البيانات المحلية: [src/lib/db.ts](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/lib/db.ts)
+- التشفير والتحقق من ملفات الحسابات: [src/lib/crypto.ts](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/lib/crypto.ts)
+- سياق التطبيق: [src/context/AppContext.tsx](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/context/AppContext.tsx)
+- شاشة التأسيس: [src/pages/BootstrapPage.tsx](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/pages/BootstrapPage.tsx)
+- شاشة تسجيل الدخول: [src/pages/LoginPage.tsx](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/src/pages/LoginPage.tsx)
+- Vercel config: [vercel.json](C:/Users/Muhammad%20Mahmoud/OneDrive/Desktop/zozo/vercel.json)
 
 ## ملاحظة مهمة
 
-إذا أردت لاحقاً نسخة متعددة المستخدمين فعلياً ببيانات مشتركة بين كل الأجهزة عبر الإنترنت، فستحتاج Backend وقاعدة بيانات دائمة خارج `Vercel static hosting`.
+إذا أردت لاحقًا نسخة متعددة المستخدمين فعليًا ببيانات مشتركة بين كل الأجهزة عبر الإنترنت، فستحتاج Backend وقاعدة بيانات دائمة خارج `Vercel static hosting`.

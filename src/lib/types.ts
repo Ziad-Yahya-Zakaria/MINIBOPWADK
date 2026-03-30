@@ -122,8 +122,11 @@ export interface BulkPackageRecord {
   note?: string;
 }
 
-export interface BootstrapPackage {
+export type AccountPackageKind = 'bootstrap' | 'user';
+
+export interface AccountPackage {
   schemaVersion: '1.0';
+  packageKind?: AccountPackageKind;
   packageId: string;
   issuedAtUtc: string;
   expiresAtUtc: string;
@@ -146,6 +149,8 @@ export interface BootstrapPackage {
     signature: string;
   };
 }
+
+export type BootstrapPackage = AccountPackage;
 
 export interface SessionState {
   userId: string | null;

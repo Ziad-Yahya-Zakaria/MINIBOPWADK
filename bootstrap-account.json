@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "packageKind": "bootstrap",
+  "packageId": "85af62a0-e8b5-4d2e-9c82-cc0a32ea3d5f",
+  "issuedAtUtc": "2026-03-30T21:57:49.407Z",
+  "expiresAtUtc": "2026-04-06T21:57:49.408Z",
+  "targetInstance": "minibopwadk.vercel.app",
+  "issuer": {
+    "tool": "Minibo Systems Developer Portal",
+    "operator": "DevOps Team"
+  },
+  "account": {
+    "username": "admin",
+    "displayName": "Primary Administrator",
+    "passwordHash": "pbkdf2$210000$DhE77Oy0w6vzaop/JI88Wg==$rpl6DSEEOhTYe3VI+6FIQZw5enL6d64eHNZxds3/HVo=",
+    "mustChangePassword": true,
+    "roles": [
+      "SuperAdmin"
+    ],
+    "permissions": [
+      "*"
+    ],
+    "signatureSvg": null
+  },
+  "integrity": {
+    "payloadSha256": "CLl9y4Hvygd3w03hZNw1xOBkdujuAJ9rwdP9wzu+elU=",
+    "signature": "NF4b2QIzpV5HUBf7J5sQLfGWzb2J1XMpsv4Ji5KIEPCJKB1H+7urrB3wlJSmx9yWLQSJ9m+kJXD6WbbeDFIvBQ=="
+  }
+}

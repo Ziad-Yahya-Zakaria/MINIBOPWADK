@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "package:developer-kit": "node ./scripts/package-developer-kit.mjs",
+    "dev:developer-portal": "node ./tools/Minibo.Systems.DeveloperPortal/server.mjs",
     "issue:bootstrap": "node ./tools/Minibo.Systems.BootstrapIssuer/issue-bootstrap.mjs",
+    "issue:user": "node ./tools/Minibo.Systems.BootstrapIssuer/issue-user-account.mjs",
     "verify:bulk": "node ./tools/Minibo.Systems.BulkPackageTool/verify-bulk-manifest.mjs"
   },
   "dependencies": {

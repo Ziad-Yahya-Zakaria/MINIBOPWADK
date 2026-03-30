@@ -10,20 +10,30 @@ const args = Object.fromEntries(
   })
 );
 
+const permissions = (args.permissions || 'DASHBOARD_VIEW')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
+const roles = (args.roles || 'User')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
+
 const output = createAccountPackage({
-  packageKind: 'bootstrap',
-  username: args.username || 'admin',
-  displayName: args.displayName || 'Primary Administrator',
+  packageKind: 'user',
+  username: args.username || 'user1',
+  displayName: args.displayName || 'New User',
   password: args.password || '1234',
   targetInstance: args.targetInstance || 'minibo-vercel-main',
   operator: args.operator || 'DevOps Team',
   expiresDays: Number(args.expiresDays || 7),
-  roles: ['SuperAdmin'],
-  permissions: ['*']
+  roles,
+  permissions
 });
 
-const outputPath = resolve(process.cwd(), 'bootstrap-account.json');
+const fileName = `${(args.username || 'user1').replace(/[^\w.-]+/g, '_')}-user-account.json`;
+const outputPath = resolve(process.cwd(), fileName);
 writeFileSync(outputPath, JSON.stringify(output, null, 2), 'utf8');
 
-console.log(`bootstrap account written to ${outputPath}`);
+console.log(`user account written to ${outputPath}`);
 console.log(`public key: ${process.env.MINIBO_BOOTSTRAP_PUBLIC_KEY || DEMO_PUBLIC_KEY_BASE64}`);

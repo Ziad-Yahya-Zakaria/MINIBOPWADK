@@ -1,10 +1,10 @@
 import nacl from 'tweetnacl';
 
-import type { BootstrapPackage } from './types';
+import type { AccountPackage } from './types';
 import { stableStringify } from './utils';
 
 const DEFAULT_BOOTSTRAP_PUBLIC_KEY =
-  '0pr82lD6mW6RkW13rqBHEp92O21wk0s9A1H0xlG4jzQ=';
+  'jiAHN+2oHNWbeLpMuVPfMc5S7X5xGqFj9+gLqSahNOs=';
 
 export async function createPasswordHash(password: string, saltBase64?: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -46,24 +46,28 @@ export async function sha256Base64(value: string): Promise<string> {
   return bytesToBase64(new Uint8Array(buffer));
 }
 
-export async function verifyBootstrapPackage(
-  pkg: BootstrapPackage,
+export async function verifyAccountPackage(
+  pkg: AccountPackage,
   instanceId: string
 ): Promise<{ ok: boolean; message?: string }> {
   if (pkg.schemaVersion !== '1.0') {
-    return { ok: false, message: 'نسخة ملف التأسيس غير مدعومة.' };
+    return { ok: false, message: 'نسخة ملف الحساب غير مدعومة.' };
   }
 
   if (new Date(pkg.expiresAtUtc).getTime() < Date.now()) {
-    return { ok: false, message: 'ملف التأسيس منتهي الصلاحية.' };
+    return { ok: false, message: 'ملف الحساب منتهي الصلاحية.' };
   }
 
   if (!(pkg.targetInstance === '*' || pkg.targetInstance === instanceId)) {
-    return { ok: false, message: 'ملف التأسيس غير مخصص لهذه النسخة.' };
+    return {
+      ok: false,
+      message: `ملف الحساب غير مخصص لهذه النسخة. المطلوب: ${instanceId} | الموجود داخل الملف: ${pkg.targetInstance}`
+    };
   }
 
   const payload = {
     schemaVersion: pkg.schemaVersion,
+    packageKind: pkg.packageKind ?? 'bootstrap',
     packageId: pkg.packageId,
     issuedAtUtc: pkg.issuedAtUtc,
     expiresAtUtc: pkg.expiresAtUtc,
@@ -78,16 +82,22 @@ export async function verifyBootstrapPackage(
     return { ok: false, message: 'بصمة الملف غير مطابقة.' };
   }
 
-  const publicKey = base64ToBytes(import.meta.env.VITE_BOOTSTRAP_PUBLIC_KEY || DEFAULT_BOOTSTRAP_PUBLIC_KEY);
   const signature = base64ToBytes(pkg.integrity.signature);
-  const verified = nacl.sign.detached.verify(
-    new TextEncoder().encode(serialized),
-    signature,
-    publicKey
+  const candidateKeys = Array.from(
+    new Set(
+      [import.meta.env.VITE_BOOTSTRAP_PUBLIC_KEY, DEFAULT_BOOTSTRAP_PUBLIC_KEY].filter(Boolean) as string[]
+    )
+  );
+  const verified = candidateKeys.some((key) =>
+    nacl.sign.detached.verify(
+      new TextEncoder().encode(serialized),
+      signature,
+      base64ToBytes(key)
+    )
   );
 
   if (!verified) {
-    return { ok: false, message: 'توقيع ملف التأسيس غير صالح.' };
+    return { ok: false, message: 'توقيع ملف الحساب غير صالح.' };
   }
 
   return { ok: true };

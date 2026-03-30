@@ -12,9 +12,9 @@ import {
 
 import { useLiveQuery } from 'dexie-react-hooks';
 
-import { createPasswordHash, verifyBootstrapPackage, verifyPassword } from '../lib/crypto';
+import { createPasswordHash, verifyAccountPackage, verifyPassword } from '../lib/crypto';
 import { appDb, ensureBaseData, pushNotification } from '../lib/db';
-import type { AppSettings, BootstrapPackage, ThemeMode, UserAccount } from '../lib/types';
+import type { AccountPackage, AppSettings, ThemeMode, UserAccount } from '../lib/types';
 import { SESSION_STORAGE_KEY } from '../lib/types';
 import { clampSvg, nowIso, uid } from '../lib/utils';
 
@@ -28,6 +28,7 @@ interface AppContextValue {
   logout: () => void;
   changePassword: (password: string) => Promise<void>;
   bootstrapFromFile: (file: File) => Promise<{ ok: boolean; message: string }>;
+  importUserAccountFile: (file: File) => Promise<{ ok: boolean; message: string }>;
   createUser: (input: {
     username: string;
     displayName: string;
@@ -106,18 +107,35 @@ export function AppProvider({ children }: PropsWithChildren) {
     await pushNotification('الأمان', 'تم تحديث كلمة المرور بنجاح.', 'success');
   }, [currentUser]);
 
-  const bootstrapFromFile = useCallback(async (file: File) => {
+  const importAccountPackage = useCallback(async (
+    file: File,
+    expectedKind: 'bootstrap' | 'user'
+  ) => {
     try {
       const text = await file.text();
-      const payload = JSON.parse(text) as BootstrapPackage;
-      const verify = await verifyBootstrapPackage(payload, instanceId);
+      const payload = JSON.parse(text) as AccountPackage;
+      const packageKind = payload.packageKind ?? 'bootstrap';
+
+      if (packageKind !== expectedKind) {
+        return {
+          ok: false,
+          message: expectedKind === 'bootstrap' ? 'هذا الملف ليس ملف تأسيس bootstrap.' : 'هذا الملف ليس ملف مستخدم.'
+        };
+      }
+
+      const verify = await verifyAccountPackage(payload, instanceId);
       if (!verify.ok) {
-        return { ok: false, message: verify.message ?? 'ملف التأسيس غير صالح.' };
+        return { ok: false, message: verify.message ?? 'ملف الحساب غير صالح.' };
       }
 
       const consumed = await appDb.consumedBootstrapPackages.get(payload.packageId);
       if (consumed) {
-        return { ok: false, message: 'تم استهلاك ملف التأسيس سابقاً.' };
+        return { ok: false, message: 'تم استهلاك ملف الحساب سابقاً.' };
+      }
+
+      const existingUser = await appDb.users.where('username').equalsIgnoreCase(payload.account.username.trim()).first();
+      if (existingUser) {
+        return { ok: false, message: 'اسم المستخدم الموجود داخل الملف موجود بالفعل.' };
       }
 
       const now = nowIso();
@@ -130,8 +148,8 @@ export function AppProvider({ children }: PropsWithChildren) {
         async () => {
           await appDb.users.put({
             id: userId,
-            username: payload.account.username,
-            displayName: payload.account.displayName,
+            username: payload.account.username.trim(),
+            displayName: payload.account.displayName.trim(),
             passwordHash: payload.account.passwordHash,
             forcePasswordChange: payload.account.mustChangePassword,
             isAdmin: payload.account.roles.includes('SuperAdmin'),
@@ -146,13 +164,36 @@ export function AppProvider({ children }: PropsWithChildren) {
         }
       );
 
-      setSession(userId);
-      await pushNotification('Bootstrap Access', 'تم إنشاء الحساب الإداري الأول بنجاح.', 'success');
-      return { ok: true, message: 'تم استيراد الحساب التأسيسي بنجاح.' };
+      await pushNotification(
+        expectedKind === 'bootstrap' ? 'Bootstrap Access' : 'ملفات المستخدمين',
+        expectedKind === 'bootstrap'
+          ? 'تم إنشاء الحساب الإداري الأول بنجاح.'
+          : `تم استيراد ملف المستخدم ${payload.account.username}.`,
+        'success'
+      );
+
+      if (expectedKind === 'bootstrap') {
+        setSession(userId);
+      }
+
+      return {
+        ok: true,
+        message: expectedKind === 'bootstrap' ? 'تم استيراد الحساب التأسيسي بنجاح.' : 'تم استيراد ملف المستخدم بنجاح.'
+      };
     } catch {
-      return { ok: false, message: 'تعذر قراءة ملف التأسيس.' };
+      return { ok: false, message: 'تعذر قراءة ملف الحساب.' };
     }
   }, [instanceId, setSession]);
+
+  const bootstrapFromFile = useCallback(
+    (file: File) => importAccountPackage(file, 'bootstrap'),
+    [importAccountPackage]
+  );
+
+  const importUserAccountFile = useCallback(
+    (file: File) => importAccountPackage(file, 'user'),
+    [importAccountPackage]
+  );
 
   const createUser = useCallback(async (input: {
     username: string;
@@ -217,6 +258,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     logout,
     changePassword,
     bootstrapFromFile,
+    importUserAccountFile,
     createUser,
     saveSettings,
     can
@@ -230,6 +272,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     logout,
     changePassword,
     bootstrapFromFile,
+    importUserAccountFile,
     createUser,
     saveSettings,
     can

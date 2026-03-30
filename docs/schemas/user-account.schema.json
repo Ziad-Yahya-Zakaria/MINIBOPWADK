@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://minibo.local/schemas/bootstrap-account.schema.json",
-  "title": "Minibo Bootstrap Account",
+  "$id": "https://minibo.local/schemas/user-account.schema.json",
+  "title": "Minibo User Account Package",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,10 +22,7 @@
     },
     "packageKind": {
       "type": "string",
-      "enum": [
-        "bootstrap",
-        "user"
-      ]
+      "const": "user"
     },
     "packageId": {
       "type": "string",
@@ -115,14 +112,14 @@
       "additionalProperties": false,
       "required": [
         "payloadSha256",
-        "hmacSha256"
+        "signature"
       ],
       "properties": {
         "payloadSha256": {
           "type": "string",
           "minLength": 1
         },
-        "hmacSha256": {
+        "signature": {
           "type": "string",
           "minLength": 1
         }
