@@ -1,0 +1,17 @@
+{
+  "name": "minibo-systems-developer-kit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:developer-portal": "node ./tools/Minibo.Systems.DeveloperPortal/server.mjs",
+    "issue:bootstrap": "node ./tools/Minibo.Systems.BootstrapIssuer/issue-bootstrap.mjs",
+    "issue:user": "node ./tools/Minibo.Systems.BootstrapIssuer/issue-user-account.mjs",
+    "verify:bulk": "node ./tools/Minibo.Systems.BulkPackageTool/verify-bulk-manifest.mjs"
+  },
+  "dependencies": {
+    "tweetnacl": "^1.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
