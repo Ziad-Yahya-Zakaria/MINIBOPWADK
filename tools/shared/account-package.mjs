@@ -1,9 +1,14 @@
 import { pbkdf2Sync, createHash, randomBytes } from 'node:crypto';
 import nacl from 'tweetnacl';
 
-export const DEMO_PRIVATE_KEY_BASE64 =
-  'ZvWW5wn3VJlpZ2+q2gA/aAwmS4oFF6pbJqhi/jUSB9eOIAc37agc1Zt4uky5U98xzlLtfnEaoWP36AupJqE06w==';
-export const DEMO_PUBLIC_KEY_BASE64 = 'jiAHN+2oHNWbeLpMuVPfMc5S7X5xGqFj9+gLqSahNOs=';
+const DEFAULT_DEVELOPER_NAME = 'زياد يحي زكريا';
+const DEFAULT_DEVELOPER_BIRTH_DATE = '2005/17/9';
+const DEFAULT_KEY_PAIR = deriveDeveloperKeyPair(
+  DEFAULT_DEVELOPER_NAME,
+  DEFAULT_DEVELOPER_BIRTH_DATE
+);
+
+export const DEMO_PUBLIC_KEY_BASE64 = Buffer.from(DEFAULT_KEY_PAIR.publicKey).toString('base64');
 
 export function createAccountPackage({
   packageKind,
@@ -46,10 +51,8 @@ export function createAccountPackage({
 
   const serialized = stableStringify(payload);
   const payloadSha256 = createHash('sha256').update(serialized, 'utf8').digest('base64');
-  const privateKey = Buffer.from(process.env.MINIBO_BOOTSTRAP_PRIVATE_KEY || DEMO_PRIVATE_KEY_BASE64, 'base64');
-  const keyPair = nacl.sign.keyPair.fromSecretKey(new Uint8Array(privateKey));
   const signature = Buffer.from(
-    nacl.sign.detached(Buffer.from(serialized, 'utf8'), keyPair.secretKey)
+    nacl.sign.detached(Buffer.from(serialized, 'utf8'), DEFAULT_KEY_PAIR.secretKey)
   ).toString('base64');
 
   return {
@@ -89,4 +92,65 @@ function createPasswordHash(rawPassword, saltBase64) {
     'sha256'
   ).toString('base64');
   return `pbkdf2$210000$${saltBase64}$${hash}`;
+}
+
+function deriveDeveloperKeyPair(fullName, birthDate) {
+  const normalizedName = normalizeDeveloperName(fullName);
+  const normalizedBirthDate = normalizeBirthDate(birthDate);
+  const seed = createHash('sha256')
+    .update(`${normalizedName}|${normalizedBirthDate}`, 'utf8')
+    .digest();
+  return nacl.sign.keyPair.fromSeed(new Uint8Array(seed));
+}
+
+function normalizeDeveloperName(value) {
+  return normalizeArabicText(value).replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function normalizeBirthDate(value) {
+  const parts = normalizeArabicDigits(value).split(/[^0-9]+/).filter(Boolean);
+  if (parts.length !== 3) {
+    throw new Error('invalid developer birth date');
+  }
+
+  let year;
+  let month;
+  let day;
+
+  if (parts[0].length === 4) {
+    year = Number(parts[0]);
+    const second = Number(parts[1]);
+    const third = Number(parts[2]);
+    if (second > 12 && third <= 12) {
+      day = second;
+      month = third;
+    } else {
+      month = second;
+      day = third;
+    }
+  } else if (parts[2].length === 4) {
+    day = Number(parts[0]);
+    month = Number(parts[1]);
+    year = Number(parts[2]);
+  } else {
+    throw new Error('invalid developer birth date');
+  }
+
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function normalizeArabicText(value) {
+  return normalizeArabicDigits(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeArabicDigits(value) {
+  return value.replace(/[٠-٩]/g, (char) =>
+    String(char.charCodeAt(0) - 1632)
+  );
 }

@@ -15,6 +15,7 @@ import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import { useNavigate } from 'react-router-dom';
 
 import { useAppContext } from '../context/AppContext';
+import { useDeveloperVaultTrigger } from '../hooks/useDeveloperVaultTrigger';
 
 export function LoginPage() {
   const { login, hasUsers, importUserAccountFile } = useAppContext();
@@ -24,6 +25,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const openDeveloperVault = useDeveloperVaultTrigger();
 
   useEffect(() => {
     if (!hasUsers) {
@@ -45,7 +47,13 @@ export function LoginPage() {
         <Card sx={{ borderRadius: 6, overflow: 'hidden' }}>
           <CardContent sx={{ p: 4 }}>
             <Stack spacing={2.5}>
-              <Typography variant="h4">Minibo Systems</Typography>
+              <Typography
+                variant="h4"
+                sx={{ cursor: 'default', userSelect: 'none' }}
+                onClick={openDeveloperVault}
+              >
+                Minibo Systems
+              </Typography>
               <Typography color="text.secondary">
                 إدارة خطوط الإنتاج واعتمادها داخل متصفحك، مع إمكانية استيراد ملف مستخدم موقّع.
               </Typography>

@@ -7,6 +7,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { Suspense, lazy } from 'react';
 
 import { AppProvider, useAppContext } from './context/AppContext';
+import { DEVELOPER_VAULT_ROUTE } from './lib/accountPackageConstants';
 import { createAppTheme } from './lib/theme';
 import { AppShell } from './components/AppShell';
 
@@ -18,6 +19,9 @@ const ProductionPage = lazy(() => import('./pages/ProductionPage').then((module)
 const ApprovalsPage = lazy(() => import('./pages/ApprovalsPage').then((module) => ({ default: module.ApprovalsPage })));
 const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })));
 const BulkPage = lazy(() => import('./pages/BulkPage').then((module) => ({ default: module.BulkPage })));
+const DeveloperVaultPage = lazy(() =>
+  import('./pages/DeveloperVaultPage').then((module) => ({ default: module.DeveloperVaultPage }))
+);
 
 const rtlCache = createCache({
   key: 'muirtl',
@@ -27,6 +31,7 @@ const rtlCache = createCache({
 function AppRoutes() {
   const { isReady, hasUsers, currentUser, settings } = useAppContext();
   const location = useLocation();
+  const isDeveloperVaultRoute = location.pathname === DEVELOPER_VAULT_ROUTE;
 
   if (!isReady) {
     return (
@@ -36,15 +41,19 @@ function AppRoutes() {
     );
   }
 
-  if (!hasUsers && location.pathname !== '/bootstrap') {
+  if (!hasUsers && location.pathname !== '/bootstrap' && !isDeveloperVaultRoute) {
     return <Navigate to="/bootstrap" replace />;
   }
 
-  if (hasUsers && !currentUser && location.pathname !== '/login') {
+  if (hasUsers && !currentUser && location.pathname !== '/login' && !isDeveloperVaultRoute) {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser?.forcePasswordChange && location.pathname !== '/change-password') {
+  if (
+    currentUser?.forcePasswordChange &&
+    location.pathname !== '/change-password' &&
+    !isDeveloperVaultRoute
+  ) {
     return <Navigate to="/change-password" replace />;
   }
 
@@ -61,6 +70,7 @@ function AppRoutes() {
           <Route path="/bootstrap" element={<BootstrapPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
+          <Route path={DEVELOPER_VAULT_ROUTE} element={<DeveloperVaultPage />} />
           <Route
             path="*"
             element={

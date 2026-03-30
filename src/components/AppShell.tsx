@@ -30,6 +30,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { appDb } from '../lib/db';
 import { useAppContext } from '../context/AppContext';
+import { useDeveloperVaultTrigger } from '../hooks/useDeveloperVaultTrigger';
 
 const drawerWidth = 280;
 
@@ -44,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
   const unreadCount = notifications.filter((item) => !item.read).length;
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const openDeveloperVault = useDeveloperVaultTrigger();
 
   const items = [
     { path: '/dashboard', label: 'لوحة التحكم', icon: <DashboardRoundedIcon /> },
@@ -75,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }}
       >
         <Toolbar>
-          <Stack spacing={0.5}>
+          <Stack spacing={0.5} sx={{ cursor: 'default', userSelect: 'none' }} onClick={openDeveloperVault}>
             <Typography variant="h5">Minibo Systems</Typography>
             <Typography variant="body2" color="text.secondary">
               A New Era for Everyone

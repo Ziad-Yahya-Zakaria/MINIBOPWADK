@@ -1,10 +1,8 @@
 import nacl from 'tweetnacl';
 
+import { ACCOUNT_PACKAGE_PUBLIC_KEY } from './accountPackageConstants';
 import type { AccountPackage } from './types';
 import { stableStringify } from './utils';
-
-const DEFAULT_BOOTSTRAP_PUBLIC_KEY =
-  'jiAHN+2oHNWbeLpMuVPfMc5S7X5xGqFj9+gLqSahNOs=';
 
 export async function createPasswordHash(password: string, saltBase64?: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -85,7 +83,7 @@ export async function verifyAccountPackage(
   const signature = base64ToBytes(pkg.integrity.signature);
   const candidateKeys = Array.from(
     new Set(
-      [import.meta.env.VITE_BOOTSTRAP_PUBLIC_KEY, DEFAULT_BOOTSTRAP_PUBLIC_KEY].filter(Boolean) as string[]
+      [import.meta.env.VITE_BOOTSTRAP_PUBLIC_KEY, ACCOUNT_PACKAGE_PUBLIC_KEY].filter(Boolean) as string[]
     )
   );
   const verified = candidateKeys.some((key) =>

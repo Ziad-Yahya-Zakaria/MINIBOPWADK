@@ -5,6 +5,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import { useNavigate } from 'react-router-dom';
 
 import { useAppContext } from '../context/AppContext';
+import { useDeveloperVaultTrigger } from '../hooks/useDeveloperVaultTrigger';
 
 export function BootstrapPage() {
   const { bootstrapFromFile, instanceId, hasUsers } = useAppContext();
@@ -12,6 +13,7 @@ export function BootstrapPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const openDeveloperVault = useDeveloperVaultTrigger();
 
   useEffect(() => {
     if (hasUsers) {
@@ -33,7 +35,13 @@ export function BootstrapPage() {
         <Card sx={{ borderRadius: 6, overflow: 'hidden' }}>
           <CardContent sx={{ p: 4 }}>
             <Stack spacing={2.5}>
-              <Typography variant="h4">Bootstrap Access</Typography>
+              <Typography
+                variant="h4"
+                sx={{ cursor: 'default', userSelect: 'none' }}
+                onClick={openDeveloperVault}
+              >
+                Bootstrap Access
+              </Typography>
               <Typography color="text.secondary">
                 هذه النسخة لا تحتوي أي مستخدمين حالياً. ارفع ملف الحساب التأسيسي
                 <strong> bootstrap-account.json </strong>
