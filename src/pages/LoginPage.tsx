@@ -12,7 +12,8 @@ import {
 } from '@mui/material';
 import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
-import { useNavigate } from 'react-router-dom';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 import { useAppContext } from '../context/AppContext';
 import { useDeveloperVaultTrigger } from '../hooks/useDeveloperVaultTrigger';
@@ -131,6 +132,15 @@ export function LoginPage() {
                     event.target.value = '';
                   }}
                 />
+              </Button>
+
+              <Button
+                component={RouterLink}
+                to="/about"
+                variant="text"
+                startIcon={<InfoRoundedIcon />}
+              >
+                عن البرنامج
               </Button>
             </Stack>
           </CardContent>

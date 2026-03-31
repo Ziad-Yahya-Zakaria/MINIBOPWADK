@@ -22,6 +22,7 @@ const BulkPage = lazy(() => import('./pages/BulkPage').then((module) => ({ defau
 const DeveloperVaultPage = lazy(() =>
   import('./pages/DeveloperVaultPage').then((module) => ({ default: module.DeveloperVaultPage }))
 );
+const AboutPage = lazy(() => import('./pages/AboutPage').then((module) => ({ default: module.AboutPage })));
 
 const rtlCache = createCache({
   key: 'muirtl',
@@ -32,6 +33,7 @@ function AppRoutes() {
   const { isReady, hasUsers, currentUser, settings } = useAppContext();
   const location = useLocation();
   const isDeveloperVaultRoute = location.pathname === DEVELOPER_VAULT_ROUTE;
+  const isPublicAboutRoute = location.pathname === '/about';
 
   if (!isReady) {
     return (
@@ -41,18 +43,19 @@ function AppRoutes() {
     );
   }
 
-  if (!hasUsers && location.pathname !== '/bootstrap' && !isDeveloperVaultRoute) {
+  if (!hasUsers && location.pathname !== '/bootstrap' && !isDeveloperVaultRoute && !isPublicAboutRoute) {
     return <Navigate to="/bootstrap" replace />;
   }
 
-  if (hasUsers && !currentUser && location.pathname !== '/login' && !isDeveloperVaultRoute) {
+  if (hasUsers && !currentUser && location.pathname !== '/login' && !isDeveloperVaultRoute && !isPublicAboutRoute) {
     return <Navigate to="/login" replace />;
   }
 
   if (
     currentUser?.forcePasswordChange &&
     location.pathname !== '/change-password' &&
-    !isDeveloperVaultRoute
+    !isDeveloperVaultRoute &&
+    !isPublicAboutRoute
   ) {
     return <Navigate to="/change-password" replace />;
   }
@@ -70,6 +73,7 @@ function AppRoutes() {
           <Route path="/bootstrap" element={<BootstrapPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path={DEVELOPER_VAULT_ROUTE} element={<DeveloperVaultPage />} />
           <Route
             path="*"

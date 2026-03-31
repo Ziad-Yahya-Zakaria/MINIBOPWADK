@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Card, CardContent, Container, Stack, Typography } from '@mui/material';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import { useNavigate } from 'react-router-dom';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 import { useAppContext } from '../context/AppContext';
 import { useDeveloperVaultTrigger } from '../hooks/useDeveloperVaultTrigger';
@@ -81,6 +82,14 @@ export function BootstrapPage() {
                     event.target.value = '';
                   }}
                 />
+              </Button>
+              <Button
+                component={RouterLink}
+                to="/about"
+                variant="text"
+                startIcon={<InfoRoundedIcon />}
+              >
+                عن البرنامج
               </Button>
               <Typography variant="body2" color="text.secondary">
                 بعد الاستيراد الناجح، سيتم إجبار المستخدم الأول على تغيير كلمة المرور قبل الوصول إلى بقية النظام.

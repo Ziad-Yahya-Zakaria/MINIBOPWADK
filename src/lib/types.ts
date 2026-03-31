@@ -1,6 +1,9 @@
 export type ThemeMode = 'light' | 'dark';
 export type BrandType = 'fresh' | 'frozen';
 export type BatchStatus = 'draft' | 'submitted' | 'approved';
+export type CustomFieldType = 'text' | 'number';
+export type IntegrationProvider = 'jdedwards' | 'salesforce' | 'custom';
+export type IntegrationAuthMode = 'token' | 'basic' | 'oauth2' | 'none';
 
 export interface UserAccount {
   id: string;
@@ -9,6 +12,7 @@ export interface UserAccount {
   passwordHash: string;
   forcePasswordChange: boolean;
   isAdmin: boolean;
+  roles?: string[];
   permissions: string[];
   signatureSvg?: string | null;
   createdAt: string;
@@ -50,11 +54,21 @@ export interface ReportDefinition {
   productIds: string[];
 }
 
+export interface CustomFieldDefinition {
+  id: string;
+  label: string;
+  kind: CustomFieldType;
+  unit?: string;
+  placeholder?: string;
+  showInFinalApproval: boolean;
+}
+
 export interface EntryLine {
   id: string;
   productId: string;
   hourValues: number[];
   hourNotes: string[];
+  customFieldValues?: Record<string, string>;
 }
 
 export interface ApprovalDecision {
@@ -87,6 +101,17 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+export interface IntegrationEndpoint {
+  id: string;
+  name: string;
+  provider: IntegrationProvider;
+  enabled: boolean;
+  authMode: IntegrationAuthMode;
+  baseUrl: string;
+  mappingProfile: string;
+  notes?: string;
+}
+
 export interface AppSettings {
   id: 'global';
   companyName: string;
@@ -94,6 +119,10 @@ export interface AppSettings {
   themeMode: ThemeMode;
   soundEnabled: boolean;
   requiredApproverIds: string[];
+  customFields: CustomFieldDefinition[];
+  sessionTtlHours: number;
+  sessionIdleMinutes: number;
+  integrations: IntegrationEndpoint[];
 }
 
 export interface ConsumedBootstrapPackage {
@@ -154,6 +183,20 @@ export type BootstrapPackage = AccountPackage;
 
 export interface SessionState {
   userId: string | null;
+  sessionId?: string | null;
+  accessToken?: string | null;
+  expiresAt?: string | null;
+}
+
+export interface UserSession {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  fingerprint: string;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  revokedAt?: string | null;
 }
 
 export const ALL_PERMISSIONS = [
@@ -164,7 +207,10 @@ export const ALL_PERMISSIONS = [
   'MANAGE_USERS',
   'MANAGE_MASTER_DATA',
   'BULK_EXPORT',
-  'BULK_IMPORT'
+  'BULK_IMPORT',
+  'MANAGE_APPROVAL_MATRIX',
+  'MANAGE_INTEGRATIONS',
+  'DEVELOPER_VAULT_ACCESS'
 ] as const;
 
 export const SESSION_STORAGE_KEY = 'minibo.session';

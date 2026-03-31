@@ -74,17 +74,26 @@ export function BulkPage() {
                 variant="contained"
                 startIcon={<DownloadRoundedIcon />}
                 onClick={async () => {
-                  await exportBulkPackage({
-                    periodFrom: fromDate,
-                    periodTo: toDate,
-                    batches: batches.filter((batch) => batch.status !== 'draft' && inDateRange(batch.date, fromDate, toDate)),
-                    products,
-                    brands,
-                    shifts,
-                    reports,
-                    settings
-                  });
-                  setMessage('تم إنشاء وتنزيل الحزمة بنجاح.');
+                  try {
+                    await exportBulkPackage({
+                      periodFrom: fromDate,
+                      periodTo: toDate,
+                      batches: batches.filter(
+                        (batch) =>
+                          batch.status !== 'draft' &&
+                          inDateRange(batch.date, fromDate, toDate)
+                      ),
+                      products,
+                      brands,
+                      shifts,
+                      reports,
+                      settings
+                    });
+                    setMessage('تم إنشاء وتنزيل الحزمة بنجاح.');
+                    setError(null);
+                  } catch {
+                    setError('تعذر إنشاء الحزمة حالياً. حاول مرة أخرى.');
+                  }
                 }}
               >
                 إنشاء حزمة وتصديرها
@@ -137,6 +146,7 @@ export function BulkPage() {
                 <TableCell>المصدر</TableCell>
                 <TableCell>الفترة</TableCell>
                 <TableCell>الحالة</TableCell>
+                <TableCell>ملاحظة</TableCell>
                 <TableCell>التاريخ</TableCell>
               </TableRow>
             </TableHead>
@@ -152,6 +162,7 @@ export function BulkPage() {
                       {pkg.manifest.periodFrom} - {pkg.manifest.periodTo}
                     </TableCell>
                     <TableCell>{pkg.status === 'completed' ? 'مكتمل' : 'فشل'}</TableCell>
+                    <TableCell>{pkg.note ?? '-'}</TableCell>
                     <TableCell>{new Date(pkg.createdAt).toLocaleString('ar-EG')}</TableCell>
                   </TableRow>
                 ))}

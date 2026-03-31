@@ -30,6 +30,7 @@ export function ApprovalsPage() {
   const brands = useLiveQuery(() => appDb.brands.toArray(), [], []);
   const shifts = useLiveQuery(() => appDb.shifts.toArray(), [], []);
   const products = useLiveQuery(() => appDb.products.toArray(), [], []);
+  const reports = useLiveQuery(() => appDb.reportDefinitions.toArray(), [], []);
   const users = useLiveQuery(() => appDb.users.toArray(), [], []);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -154,7 +155,12 @@ export function ApprovalsPage() {
                           exportBatchWorkbook(
                             batch,
                             products,
-                            `production-${brand?.name ?? 'brand'}-${batch.date}.xlsx`
+                            `production-${brand?.name ?? 'brand'}-${batch.date}.xlsx`,
+                            {
+                              settings,
+                              shift,
+                              reports
+                            }
                           )
                         }
                       >
@@ -169,6 +175,7 @@ export function ApprovalsPage() {
                             brand,
                             shift,
                             products,
+                            reports,
                             users,
                             settings
                           })

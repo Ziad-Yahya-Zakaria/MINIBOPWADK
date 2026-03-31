@@ -10,6 +10,7 @@ import type {
   ProductionBatch,
   ReportDefinition,
   ShiftDefinition,
+  UserSession,
   UserAccount
 } from './types';
 import { nowIso, uid } from './utils';
@@ -25,6 +26,7 @@ class MiniboDatabase extends Dexie {
   settings!: Table<AppSettings, 'global'>;
   consumedBootstrapPackages!: Table<ConsumedBootstrapPackage, string>;
   bulkPackages!: Table<BulkPackageRecord, string>;
+  sessions!: Table<UserSession, string>;
 
   public constructor() {
     super('minibo-systems-db');
@@ -40,6 +42,19 @@ class MiniboDatabase extends Dexie {
       consumedBootstrapPackages: '&packageId,consumedAt',
       bulkPackages: '&packageId,kind,createdAt,status'
     });
+    this.version(2).stores({
+      users: '&id,&username,createdAt',
+      shifts: '&id,name',
+      brands: '&id,name,type',
+      products: '&id,&code,name',
+      reportDefinitions: '&id,name',
+      batches: '&id,date,shiftId,brandId,createdByUserId,status,imported,sourcePackageId',
+      notifications: '&id,createdAt,read',
+      settings: '&id',
+      consumedBootstrapPackages: '&packageId,consumedAt',
+      bulkPackages: '&packageId,kind,createdAt,status',
+      sessions: '&id,userId,expiresAt,revokedAt,lastSeenAt'
+    });
   }
 }
 
@@ -54,7 +69,28 @@ export async function ensureBaseData(instanceId: string): Promise<void> {
       instanceId,
       themeMode: 'light',
       soundEnabled: true,
-      requiredApproverIds: []
+      requiredApproverIds: [],
+      customFields: [],
+      sessionTtlHours: 12,
+      sessionIdleMinutes: 90,
+      integrations: []
+    });
+  } else if (
+    !Array.isArray(settings.customFields) ||
+    typeof settings.sessionTtlHours !== 'number' ||
+    typeof settings.sessionIdleMinutes !== 'number' ||
+    !Array.isArray(settings.integrations)
+  ) {
+    await appDb.settings.put({
+      ...settings,
+      customFields: Array.isArray(settings.customFields) ? settings.customFields : [],
+      sessionTtlHours:
+        typeof settings.sessionTtlHours === 'number' ? settings.sessionTtlHours : 12,
+      sessionIdleMinutes:
+        typeof settings.sessionIdleMinutes === 'number'
+          ? settings.sessionIdleMinutes
+          : 90,
+      integrations: Array.isArray(settings.integrations) ? settings.integrations : []
     });
   }
 

@@ -24,6 +24,7 @@ import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -52,6 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { path: '/production', label: 'إدخال الإنتاج', icon: <Inventory2RoundedIcon /> },
     { path: '/approvals', label: 'الاعتمادات', icon: <FactCheckRoundedIcon /> },
     { path: '/bulk', label: 'Free Engine Bulk', icon: <DatasetLinkedRoundedIcon /> },
+    { path: '/about', label: 'معلومات النظام', icon: <InfoRoundedIcon /> },
     { path: '/admin', label: 'لوحة الإدارة', icon: <SettingsRoundedIcon /> }
   ];
 

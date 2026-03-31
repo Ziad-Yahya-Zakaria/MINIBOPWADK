@@ -43,56 +43,102 @@ export function DashboardPage() {
   const products = useLiveQuery(() => appDb.products.toArray(), [], []);
   const batches = useLiveQuery(() => appDb.batches.toArray(), [], []);
   const shifts = useLiveQuery(() => appDb.shifts.toArray(), [], []);
+  const reports = useLiveQuery(() => appDb.reportDefinitions.toArray(), [], []);
   const [fromDate, setFromDate] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
   const [toDate, setToDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [selectedProductId, setSelectedProductId] = useState('all');
 
   const filteredBatches = useMemo(
     () =>
-      batches.filter((batch) => batch.status !== 'draft' && inDateRange(batch.date, fromDate, toDate)),
+      batches.filter(
+        (batch) => batch.status !== 'draft' && inDateRange(batch.date, fromDate, toDate)
+      ),
     [batches, fromDate, toDate]
   );
 
   const metrics = useMemo(() => {
     const productMap = new Map(products.map((item) => [item.id, item]));
     const shiftMap = new Map(shifts.map((item) => [item.id, item]));
-    const aggregates = new Map<string, { productName: string; productCode: string; packages: number; kg: number }>();
+    const productAggregates = new Map<
+      string,
+      { productName: string; productCode: string; packages: number; kg: number }
+    >();
+    const reportAggregates = new Map<
+      string,
+      { reportName: string; packages: number; kg: number; matchedProducts: number }
+    >();
     let totalKg = 0;
     let totalHours = 0;
+
+    for (const report of reports) {
+      reportAggregates.set(report.id, {
+        reportName: report.name,
+        packages: 0,
+        kg: 0,
+        matchedProducts:
+          selectedProductId === 'all'
+            ? report.productIds.length
+            : report.productIds.includes(selectedProductId)
+              ? 1
+              : 0
+      });
+    }
 
     for (const batch of filteredBatches) {
       const shift = shiftMap.get(batch.shiftId);
       totalHours += shift?.hours ?? 0;
+
       for (const entry of batch.entries) {
         if (selectedProductId !== 'all' && entry.productId !== selectedProductId) {
           continue;
         }
+
         const product = productMap.get(entry.productId);
         const totalPackages = entry.hourValues.reduce((sum, value) => sum + value, 0);
         const totalProductKg = totalPackages * (product?.packageWeightKg ?? 0);
         totalKg += totalProductKg;
-        const current = aggregates.get(entry.productId) ?? {
+
+        const currentProduct = productAggregates.get(entry.productId) ?? {
           productName: product?.name ?? 'منتج',
           productCode: product?.code ?? '-',
           packages: 0,
           kg: 0
         };
-        current.packages += totalPackages;
-        current.kg += totalProductKg;
-        aggregates.set(entry.productId, current);
+        currentProduct.packages += totalPackages;
+        currentProduct.kg += totalProductKg;
+        productAggregates.set(entry.productId, currentProduct);
+
+        for (const report of reports) {
+          if (!report.productIds.includes(entry.productId)) {
+            continue;
+          }
+          const currentReport = reportAggregates.get(report.id);
+          if (!currentReport) {
+            continue;
+          }
+          currentReport.packages += totalPackages;
+          currentReport.kg += totalProductKg;
+        }
       }
     }
 
-    const rows = Array.from(aggregates.values()).sort((left, right) => right.kg - left.kg);
+    const rows = Array.from(productAggregates.values()).sort(
+      (left, right) => right.kg - left.kg
+    );
+    const reportRows = Array.from(reportAggregates.values())
+      .filter((item) => item.packages > 0 || item.matchedProducts > 0)
+      .sort((left, right) => right.kg - left.kg);
+
     return {
       rows,
+      reportRows,
       totalKg,
       totalHours,
       totalPackages: rows.reduce((sum, item) => sum + item.packages, 0),
       pendingApprovals: filteredBatches.filter((batch) => batch.status === 'submitted').length,
       topProduct: rows[0]?.productName ?? 'لا يوجد'
     };
-  }, [filteredBatches, products, shifts, selectedProductId]);
+  }, [filteredBatches, products, reports, selectedProductId, shifts]);
 
   return (
     <Stack spacing={3}>
@@ -148,6 +194,7 @@ export function DashboardPage() {
                 onClick={() =>
                   exportDashboardWorkbook(
                     metrics.rows,
+                    metrics.reportRows,
                     `dashboard-${fromDate}-${toDate}.xlsx`
                   )
                 }
@@ -161,16 +208,26 @@ export function DashboardPage() {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 3 }}>
-          <StatCard title="وزن الإنتاج الفعلي" value={`${formatNumber(metrics.totalKg)} كجم`} />
+          <StatCard
+            title="وزن الإنتاج الفعلي"
+            value={`${formatNumber(metrics.totalKg)} كجم`}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 3 }}>
-          <StatCard title="إجمالي ساعات التشغيل" value={`${formatNumber(metrics.totalHours)} ساعة`} />
+          <StatCard
+            title="إجمالي ساعات التشغيل"
+            value={`${formatNumber(metrics.totalHours)} ساعة`}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 3 }}>
           <StatCard title="إجمالي العبوات" value={formatNumber(metrics.totalPackages)} />
         </Grid>
         <Grid size={{ xs: 12, md: 3 }}>
-          <StatCard title="الاعتمادات المعلقة" value={formatNumber(metrics.pendingApprovals)} hint={`أعلى منتج: ${metrics.topProduct}`} />
+          <StatCard
+            title="الاعتمادات المعلقة"
+            value={formatNumber(metrics.pendingApprovals)}
+            hint={`أعلى منتج: ${metrics.topProduct}`}
+          />
         </Grid>
       </Grid>
 
@@ -252,6 +309,34 @@ export function DashboardPage() {
                 <TableRow key={row.productCode}>
                   <TableCell>{row.productName}</TableCell>
                   <TableCell>{row.productCode}</TableCell>
+                  <TableCell>{formatNumber(row.packages)}</TableCell>
+                  <TableCell>{formatNumber(row.kg)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            ربط الإنتاج بالتقارير النهائية
+          </Typography>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>اسم التقرير</TableCell>
+                <TableCell>عدد المنتجات المشمولة</TableCell>
+                <TableCell>العبوات المجمعة</TableCell>
+                <TableCell>الكيلو المجمع</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {metrics.reportRows.map((row) => (
+                <TableRow key={row.reportName}>
+                  <TableCell>{row.reportName}</TableCell>
+                  <TableCell>{formatNumber(row.matchedProducts)}</TableCell>
                   <TableCell>{formatNumber(row.packages)}</TableCell>
                   <TableCell>{formatNumber(row.kg)}</TableCell>
                 </TableRow>

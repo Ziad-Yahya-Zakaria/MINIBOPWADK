@@ -1,0 +1,334 @@
+Minibo Systems
+الرسم النصي للوصلات الداخلية للنظام
+تاريخ التحديث: 2026-03-31
+
+==================================================
+1) البنية العليا
+==================================================
+
+ [ /about ]   [ /bootstrap ]   [ /login ]   [ /vault ]
+      \            |               |            /
+       \           |               |           /
+        +----------+---------------+----------+
+                           |
+                           v
+                 [ App.tsx + Router ]
+                           |
+                           v
+                    [ AppShell / UI ]
+                           |
+          +----------------+----------------+
+          |                                 |
+          v                                 v
+ [ AppContext / Session Gateway ]   [ Theme + Layout + Navigation ]
+          |
+          v
+ [ IndexedDB عبر Dexie ]
+
+
+==================================================
+2) طبقة الجلسات والتوثيق
+==================================================
+
+ [ المستخدم ]
+      |
+      v
+ [ LoginPage / BootstrapPage / DeveloperVaultPage ]
+      |
+      v
+ [ AppContext.login / bootstrapFromFile / importUserAccountFile ]
+      |
+      +--> فحص كلمة المرور أو توقيع ملف الحساب
+      +--> إنشاء access token محلي
+      +--> Hash للتوكن داخل جدول sessions
+      +--> تخزين sessionState في localStorage
+      +--> ربط الجلسة بـ fingerprint للجهاز
+      +--> فرض:
+           - Session TTL
+           - Idle Timeout
+           - Revocation عند logout/changePassword
+
+ الجداول المستخدمة:
+ - users
+ - sessions
+ - consumedBootstrapPackages
+ - settings
+
+
+==================================================
+3) قلب البيانات المحلي
+==================================================
+
+ appDb
+  |
+  +-- settings
+  |     - companyName
+  |     - instanceId
+  |     - themeMode
+  |     - requiredApproverIds
+  |     - customFields[]
+  |     - sessionTtlHours
+  |     - sessionIdleMinutes
+  |     - integrations[]
+  |
+  +-- users
+  |     - roles[]
+  |     - permissions[]
+  |     - signatureSvg
+  |
+  +-- sessions
+  |     - tokenHash
+  |     - fingerprint
+  |     - expiresAt
+  |     - lastSeenAt
+  |     - revokedAt
+  |
+  +-- brands
+  +-- products
+  +-- shifts
+  +-- reportDefinitions
+  +-- batches
+  +-- bulkPackages
+  +-- notifications
+  +-- consumedBootstrapPackages
+
+
+==================================================
+4) مسار إدخال الإنتاج
+==================================================
+
+ [ AdminPage ]
+      |
+      +--> تعريف المنتجات products
+      +--> تعريف البراندات brands
+      +--> تعريف الورديات shifts
+      +--> تعريف التقارير reportDefinitions
+      +--> تعريف الحقول المخصصة customFields
+      +--> تعريف نقاط التكامل integrations
+      |
+      v
+ [ ProductionPage ]
+      |
+      +--> اختيار البراند + الوردية + التاريخ
+      +--> تكوين EntryLine لكل منتج
+      +--> تحميل الحقول المخصصة من settings.customFields
+      +--> عرض ProductionEntryTable
+      |
+      v
+ [ TanStack Table ]
+      |
+      +--> أعمدة ثابتة:
+           - اسم المنتج
+           - كود المنتج
+           - ساعات الوردية
+           - إجمالي العبوات
+           - إجمالي الكيلو
+      |
+      +--> أعمدة ديناميكية:
+           - كل Custom Field مضاف من مركز التحكم
+      |
+      +--> Footer تجميعي:
+           - إجمالي كل ساعة
+           - إجمالي العبوات
+           - إجمالي الكيلو
+      |
+      v
+ [ batch.entries[] ]
+      |
+      +--> hourValues[]
+      +--> hourNotes[]
+      +--> customFieldValues{}
+      |
+      v
+ [ batches ]
+
+
+==================================================
+5) منطق الربط بين المنتج والتقرير
+==================================================
+
+ [ reportDefinitions ]
+      |
+      +--> كل تقرير يحتوي productIds[]
+      |
+      v
+ [ DashboardPage ]
+      |
+      +--> يقرأ batches المعتمدة أو المرسلة
+      +--> يجمع الإنتاج حسب المنتج
+      +--> يجمع الإنتاج حسب التقرير النهائي
+      +--> يحسب:
+           - packages
+           - kg
+           - matchedProducts
+      |
+      v
+ [ KPI + Charts + Reports Table ]
+
+ الفكرة التشغيلية:
+ - المنتج يسجل بالساعة داخل الوردية.
+ - كل صنف مرتبط بتقرير أو أكثر.
+ - عند التجميع النهائي يحسب النظام كمية هذا الصنف ويدفعها تلقائياً للتقرير المرتبط.
+ - النتيجة النهائية يمكن عرضها في اللوحة أو تصديرها في XLSX/PDF.
+
+
+==================================================
+6) مسار الاعتماد النهائي
+==================================================
+
+ [ settings.requiredApproverIds ]
+             +
+ [ user.permissions / roles ]
+             |
+             v
+ [ ApprovalsPage ]
+      |
+      +--> قراءة batch.status
+      +--> منع نفس المستخدم من الاعتماد مرتين
+      +--> تسجيل ApprovalDecision
+      +--> تحديث status إلى approved عند اكتمال العدد المطلوب
+      |
+      +--> exportBatchWorkbook(...)
+      +--> exportApprovalPdf(...)
+      |
+      v
+ [ ملفات اعتماد نهائية ]
+
+ يحتوي ملف الاعتماد النهائي على:
+ - بيانات البراند والوردية والتاريخ
+ - كل المنتج/الكود/الكمية
+ - الحقول المخصصة المسموح بظهورها
+ - الإجماليات بالعبوة والكيلو
+ - الربط بالتقارير النهائية
+ - توقيعات المعتمدين SVG
+
+
+==================================================
+7) محرك التصدير
+==================================================
+
+ [ exporters.ts ]
+      |
+      +--> import lazy لـ:
+           - exceljs
+           - html2pdf.js
+           - jszip
+      |
+      +--> exportProductsTemplate
+      +--> importProductsWorkbook
+      +--> exportApprovalPdf
+      +--> exportBatchWorkbook
+      +--> exportDashboardWorkbook
+      +--> exportBulkPackage / importBulkPackage
+
+ مبدأ الكفاءة هنا:
+ - المكتبات الثقيلة لا تحمل مع أول فتح للتطبيق.
+ - التحميل يتم عند طلب التصدير فقط.
+ - هذا يقلل الحمل الأولي ويحسن زمن الإقلاع.
+
+
+==================================================
+8) طبقة التكامل المؤسسي
+==================================================
+
+ [ AdminPage / Control Center ]
+      |
+      v
+ [ settings.integrations[] ]
+      |
+      +--> provider
+           - jdedwards
+           - salesforce
+           - custom
+      |
+      +--> authMode
+           - token
+           - oauth2
+           - basic
+           - none
+      |
+      +--> baseUrl
+      +--> mappingProfile
+      +--> notes
+      +--> enabled
+
+ هذا هو منفذ التوسع الحالي.
+ التنفيذ الفعلي للـ adapters يمكن بناؤه لاحقاً فوق هذه الطبقة بدون كسر الواجهة أو نموذج البيانات.
+
+
+==================================================
+9) صفحة المطورين Developer Vault
+==================================================
+
+ [ DeveloperVaultPage ]
+      |
+      +--> Challenge محلي
+      +--> Access Profiles
+      +--> Bootstrap Account / User Account
+      +--> Roles + Permissions + Signature
+      |
+      v
+ [ createDeveloperSignedAccountPackage ]
+      |
+      +--> payloadSha256
+      +--> signature
+      +--> account package JSON
+      |
+      v
+ [ bootstrap-account.json / user-account.json ]
+
+ استخدام هذه الطبقة:
+ - إنشاء حساب تأسيسي لأول عميل
+ - إنشاء حسابات معتمد أول / معتمد ثان / تشغيل / تكامل
+ - توزيع ملفات حسابات معتمدة خارجياً
+
+
+==================================================
+10) حدود الثقة Security Boundaries
+==================================================
+
+ المنطقة الأولى:
+ - واجهة React
+ - تعتبر طبقة عرض فقط
+
+ المنطقة الثانية:
+ - AppContext
+ - تعتبر حارس الجلسة والصلاحيات
+
+ المنطقة الثالثة:
+ - IndexedDB
+ - تمثل مخزن التشغيل المحلي
+
+ المنطقة الرابعة:
+ - ملفات التصدير والاستيراد
+ - تعتبر حدود تبادل بين النظام المحلي وأنظمة أو بيئات أخرى
+
+ المنطقة الخامسة:
+ - نقاط التكامل المستقبلية
+ - JD Edwards / Salesforce / Custom APIs
+
+
+==================================================
+11) أهم نقاط القوة الحالية
+==================================================
+
+ - Local-first architecture مناسبة للتشغيل السريع وبيئات الانقطاع.
+ - إدخال جدولي قوي عبر TanStack Table.
+ - ربط مباشر بين الإنتاج الخام والتقرير النهائي.
+ - صلاحيات قابلة للتخصيص عبر Profiles و Permissions.
+ - جلسات token-based مع انتهاء وخمول وإبطال.
+ - تصدير مؤسسي لـ PDF/XLSX.
+ - منفذ جاهز للتكاملات المؤسسية.
+
+
+==================================================
+12) المسار المؤسسي التالي
+==================================================
+
+ - إضافة API Gateway حقيقي خلف AppContext.
+ - نقل sessions و users و approvals إلى Backend مركزي.
+ - إضافة Audit Trail لكل عملية.
+ - إضافة Queue للتكاملات الصادرة والواردة.
+ - إضافة Mapping Engine فعلي لكل مزود خارجي.
+ - دعم SSO / SAML / OIDC للحسابات المؤسسية.
+ - إضافة Web Worker لتصدير الملفات الكبيرة.

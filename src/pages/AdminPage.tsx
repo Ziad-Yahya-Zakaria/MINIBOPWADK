@@ -10,6 +10,7 @@ import {
   FormControlLabel,
   FormGroup,
   Grid,
+  MenuItem,
   Stack,
   Tab,
   Tabs,
@@ -28,15 +29,43 @@ import QueryStatsRoundedIcon from '@mui/icons-material/QueryStatsRounded';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import ViewColumnRoundedIcon from '@mui/icons-material/ViewColumnRounded';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useAppContext } from '../context/AppContext';
+import { ACCESS_PROFILES, getAccessProfile } from '../lib/accessProfiles';
 import { appDb, pushNotification } from '../lib/db';
 import { exportProductsTemplate, importProductsWorkbook } from '../lib/exporters';
+import type { CustomFieldType, IntegrationAuthMode, IntegrationProvider } from '../lib/types';
 import { ALL_PERMISSIONS } from '../lib/types';
 import { uid } from '../lib/utils';
 
-type AdminTab = 'users' | 'shifts' | 'brands' | 'products' | 'reports' | 'settings';
+type AdminTab =
+  | 'users'
+  | 'shifts'
+  | 'brands'
+  | 'products'
+  | 'reports'
+  | 'control'
+  | 'settings';
+
+interface CustomFieldFormState {
+  label: string;
+  kind: CustomFieldType;
+  unit: string;
+  placeholder: string;
+  showInFinalApproval: boolean;
+}
+
+interface IntegrationFormState {
+  name: string;
+  provider: IntegrationProvider;
+  authMode: IntegrationAuthMode;
+  baseUrl: string;
+  mappingProfile: string;
+  notes: string;
+  enabled: boolean;
+}
 
 export function AdminPage() {
   const { currentUser, createUser, settings, saveSettings } = useAppContext();
@@ -50,10 +79,12 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [userForm, setUserForm] = useState({
+    profileId: 'operations-user',
     username: '',
     displayName: '',
     password: '',
     isAdmin: false,
+    roles: ['Operator'],
     permissions: ['DASHBOARD_VIEW', 'PRODUCTION_EDIT'],
     signatureSvg: ''
   });
@@ -86,11 +117,29 @@ export function AdminPage() {
     name: '',
     productIds: [] as string[]
   });
+  const [customFieldForm, setCustomFieldForm] = useState<CustomFieldFormState>({
+    label: '',
+    kind: 'text',
+    unit: '',
+    placeholder: '',
+    showInFinalApproval: true
+  });
+  const [integrationForm, setIntegrationForm] = useState<IntegrationFormState>({
+    name: '',
+    provider: 'custom',
+    authMode: 'token',
+    baseUrl: '',
+    mappingProfile: '',
+    notes: '',
+    enabled: true
+  });
 
   const approverOptions = useMemo(
     () => users.filter((user) => user.isAdmin || user.permissions.includes('APPROVE_BATCH')),
     [users]
   );
+  const customFields = settings?.customFields ?? [];
+  const integrations = settings?.integrations ?? [];
 
   if (!currentUser?.isAdmin) {
     return <Alert severity="warning">لوحة الإدارة متاحة للادمن فقط.</Alert>;
@@ -110,6 +159,7 @@ export function AdminPage() {
             <Tab value="brands" label="البراندات" />
             <Tab value="products" label="الأصناف" />
             <Tab value="reports" label="التقارير" />
+            <Tab value="control" label="مركز التحكم" />
             <Tab value="settings" label="الإعدادات" />
           </Tabs>
         </CardContent>
@@ -122,6 +172,30 @@ export function AdminPage() {
               <CardContent>
                 <Stack spacing={2}>
                   <Typography variant="h6">إنشاء مستخدم</Typography>
+                  <TextField
+                    select
+                    label="قالب الحساب"
+                    value={userForm.profileId}
+                    onChange={(event) => {
+                      const profile = getAccessProfile(event.target.value);
+                      if (!profile) {
+                        return;
+                      }
+                      setUserForm((current) => ({
+                        ...current,
+                        profileId: profile.id,
+                        isAdmin: profile.isAdmin,
+                        roles: profile.roles,
+                        permissions: profile.permissions
+                      }));
+                    }}
+                  >
+                    {ACCESS_PROFILES.filter((profile) => profile.packageKind !== 'bootstrap').map((profile) => (
+                      <MenuItem key={profile.id} value={profile.id}>
+                        {profile.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
                   <TextField
                     label="اسم المستخدم"
                     value={userForm.username}
@@ -142,10 +216,29 @@ export function AdminPage() {
                     control={
                       <Checkbox
                         checked={userForm.isAdmin}
-                        onChange={(event) => setUserForm((current) => ({ ...current, isAdmin: event.target.checked }))}
+                        onChange={(event) =>
+                          setUserForm((current) => ({
+                            ...current,
+                            isAdmin: event.target.checked,
+                            permissions: event.target.checked ? ['*'] : current.permissions
+                          }))
+                        }
                       />
                     }
                     label="صلاحية Admin كاملة"
+                  />
+                  <TextField
+                    label="الأدوار"
+                    value={userForm.roles.join(', ')}
+                    onChange={(event) =>
+                      setUserForm((current) => ({
+                        ...current,
+                        roles: event.target.value
+                          .split(',')
+                          .map((item) => item.trim())
+                          .filter(Boolean)
+                      }))
+                    }
                   />
                   <Typography variant="subtitle2">الصلاحيات</Typography>
                   <FormGroup>
@@ -154,7 +247,10 @@ export function AdminPage() {
                         key={permission}
                         control={
                           <Checkbox
-                            checked={userForm.permissions.includes(permission)}
+                            checked={
+                              userForm.permissions.includes('*') ||
+                              userForm.permissions.includes(permission)
+                            }
                             disabled={userForm.isAdmin}
                             onChange={(event) => {
                               setUserForm((current) => ({
@@ -186,10 +282,12 @@ export function AdminPage() {
                         setMessage(result.message);
                         setError(null);
                         setUserForm({
+                          profileId: 'operations-user',
                           username: '',
                           displayName: '',
                           password: '',
                           isAdmin: false,
+                          roles: ['Operator'],
                           permissions: ['DASHBOARD_VIEW', 'PRODUCTION_EDIT'],
                           signatureSvg: ''
                         });
@@ -216,6 +314,7 @@ export function AdminPage() {
                       <TableCell>اسم المستخدم</TableCell>
                       <TableCell>الاسم الظاهر</TableCell>
                       <TableCell>النوع</TableCell>
+                      <TableCell>الأدوار</TableCell>
                       <TableCell>الصلاحيات</TableCell>
                     </TableRow>
                   </TableHead>
@@ -225,6 +324,13 @@ export function AdminPage() {
                         <TableCell>{user.username}</TableCell>
                         <TableCell>{user.displayName}</TableCell>
                         <TableCell>{user.isAdmin ? 'Admin' : 'User'}</TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                            {(user.roles ?? []).slice(0, 3).map((role) => (
+                              <Chip key={role} size="small" color="secondary" label={role} />
+                            ))}
+                          </Stack>
+                        </TableCell>
                         <TableCell>
                           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                             {(user.permissions.slice(0, 4) || []).map((permission) => (
@@ -380,6 +486,198 @@ export function AdminPage() {
                         <TableCell>{brand.productIds.length}</TableCell>
                       </TableRow>
                     ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid size={{ xs: 12, lg: 5 }}>
+            <Card>
+              <CardContent>
+                <Stack spacing={2}>
+                  <Typography variant="h6">مركز التحكم في التكاملات</Typography>
+                  <TextField
+                    label="اسم نقطة التكامل"
+                    value={integrationForm.name}
+                    onChange={(event) =>
+                      setIntegrationForm((current) => ({
+                        ...current,
+                        name: event.target.value
+                      }))
+                    }
+                  />
+                  <TextField
+                    select
+                    label="المزود"
+                    value={integrationForm.provider}
+                    onChange={(event) =>
+                      setIntegrationForm((current) => ({
+                        ...current,
+                        provider: event.target.value as IntegrationProvider
+                      }))
+                    }
+                  >
+                    <MenuItem value="jdedwards">JD Edwards</MenuItem>
+                    <MenuItem value="salesforce">Salesforce</MenuItem>
+                    <MenuItem value="custom">Custom API</MenuItem>
+                  </TextField>
+                  <TextField
+                    select
+                    label="نمط التوثيق"
+                    value={integrationForm.authMode}
+                    onChange={(event) =>
+                      setIntegrationForm((current) => ({
+                        ...current,
+                        authMode: event.target.value as IntegrationAuthMode
+                      }))
+                    }
+                  >
+                    <MenuItem value="token">Token</MenuItem>
+                    <MenuItem value="oauth2">OAuth 2.0</MenuItem>
+                    <MenuItem value="basic">Basic Auth</MenuItem>
+                    <MenuItem value="none">None</MenuItem>
+                  </TextField>
+                  <TextField
+                    label="Base URL"
+                    value={integrationForm.baseUrl}
+                    onChange={(event) =>
+                      setIntegrationForm((current) => ({
+                        ...current,
+                        baseUrl: event.target.value
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Mapping Profile"
+                    value={integrationForm.mappingProfile}
+                    onChange={(event) =>
+                      setIntegrationForm((current) => ({
+                        ...current,
+                        mappingProfile: event.target.value
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="ملاحظات"
+                    multiline
+                    minRows={3}
+                    value={integrationForm.notes}
+                    onChange={(event) =>
+                      setIntegrationForm((current) => ({
+                        ...current,
+                        notes: event.target.value
+                      }))
+                    }
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={integrationForm.enabled}
+                        onChange={(event) =>
+                          setIntegrationForm((current) => ({
+                            ...current,
+                            enabled: event.target.checked
+                          }))
+                        }
+                      />
+                    }
+                    label="تفعيل التكامل"
+                  />
+                  <Button
+                    variant="contained"
+                    onClick={async () => {
+                      if (!integrationForm.name.trim() || !integrationForm.baseUrl.trim()) {
+                        setError('اسم نقطة التكامل وBase URL مطلوبان.');
+                        return;
+                      }
+
+                      await saveSettings({
+                        integrations: [
+                          ...integrations,
+                          {
+                            id: uid('integration'),
+                            name: integrationForm.name.trim(),
+                            provider: integrationForm.provider,
+                            enabled: integrationForm.enabled,
+                            authMode: integrationForm.authMode,
+                            baseUrl: integrationForm.baseUrl.trim(),
+                            mappingProfile: integrationForm.mappingProfile.trim(),
+                            notes: integrationForm.notes.trim()
+                          }
+                        ]
+                      });
+
+                      setIntegrationForm({
+                        name: '',
+                        provider: 'custom',
+                        authMode: 'token',
+                        baseUrl: '',
+                        mappingProfile: '',
+                        notes: '',
+                        enabled: true
+                      });
+                      setError(null);
+                      setMessage('تمت إضافة نقطة تكامل جديدة.');
+                    }}
+                  >
+                    إضافة نقطة تكامل
+                  </Button>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid size={{ xs: 12, lg: 7 }}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  التكاملات الحالية
+                </Typography>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>الاسم</TableCell>
+                      <TableCell>المزود</TableCell>
+                      <TableCell>التوثيق</TableCell>
+                      <TableCell>الحالة</TableCell>
+                      <TableCell>إجراء</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {integrations.map((integration) => (
+                      <TableRow key={integration.id}>
+                        <TableCell>
+                          <Stack spacing={0.5}>
+                            <Typography fontWeight={700}>{integration.name}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {integration.baseUrl}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell>{integration.provider}</TableCell>
+                        <TableCell>{integration.authMode}</TableCell>
+                        <TableCell>{integration.enabled ? 'مفعل' : 'متوقف'}</TableCell>
+                        <TableCell>
+                          <Button
+                            color="error"
+                            onClick={async () => {
+                              await saveSettings({
+                                integrations: integrations.filter(
+                                  (item) => item.id !== integration.id
+                                )
+                              });
+                              setMessage(`تم حذف التكامل ${integration.name}.`);
+                            }}
+                          >
+                            حذف
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {integrations.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5}>لا توجد تكاملات معرفة بعد.</TableCell>
+                      </TableRow>
+                    ) : null}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -565,6 +863,192 @@ export function AdminPage() {
         </Grid>
       ) : null}
 
+      {tab === 'control' ? (
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, lg: 5 }}>
+            <Card>
+              <CardContent>
+                <Stack spacing={2}>
+                  <Typography variant="h6">مركز التحكم في الحقول</Typography>
+                  <TextField
+                    label="اسم الخانة"
+                    value={customFieldForm.label}
+                    onChange={(event) =>
+                      setCustomFieldForm((current) => ({
+                        ...current,
+                        label: event.target.value
+                      }))
+                    }
+                  />
+                  <TextField
+                    select
+                    label="نوع الخانة"
+                    value={customFieldForm.kind}
+                    onChange={(event) =>
+                      setCustomFieldForm((current) => ({
+                        ...current,
+                        kind: event.target.value === 'number' ? 'number' : 'text'
+                      }))
+                    }
+                  >
+                    <MenuItem value="text">نصي</MenuItem>
+                    <MenuItem value="number">رقمي</MenuItem>
+                  </TextField>
+                  <TextField
+                    label="الوحدة"
+                    value={customFieldForm.unit}
+                    onChange={(event) =>
+                      setCustomFieldForm((current) => ({
+                        ...current,
+                        unit: event.target.value
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="نص إرشادي"
+                    value={customFieldForm.placeholder}
+                    onChange={(event) =>
+                      setCustomFieldForm((current) => ({
+                        ...current,
+                        placeholder: event.target.value
+                      }))
+                    }
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={customFieldForm.showInFinalApproval}
+                        onChange={(event) =>
+                          setCustomFieldForm((current) => ({
+                            ...current,
+                            showInFinalApproval: event.target.checked
+                          }))
+                        }
+                      />
+                    }
+                    label="إظهار الخانة في الإذن النهائي"
+                  />
+                  <Button
+                    variant="contained"
+                    startIcon={<ViewColumnRoundedIcon />}
+                    onClick={async () => {
+                      const label = customFieldForm.label.trim();
+                      if (!label) {
+                        setError('اسم الخانة مطلوب.');
+                        return;
+                      }
+
+                      if (
+                        customFields.some(
+                          (field) => field.label.trim().toLowerCase() === label.toLowerCase()
+                        )
+                      ) {
+                        setError('هذه الخانة موجودة بالفعل.');
+                        return;
+                      }
+
+                      await saveSettings({
+                        customFields: [
+                          ...customFields,
+                          {
+                            id: uid('field'),
+                            label,
+                            kind: customFieldForm.kind,
+                            unit: customFieldForm.unit.trim(),
+                            placeholder: customFieldForm.placeholder.trim(),
+                            showInFinalApproval: customFieldForm.showInFinalApproval
+                          }
+                        ]
+                      });
+
+                      setCustomFieldForm({
+                        label: '',
+                        kind: 'text',
+                        unit: '',
+                        placeholder: '',
+                        showInFinalApproval: true
+                      });
+                      setError(null);
+                      setMessage('تمت إضافة الخانة إلى مركز التحكم.');
+                    }}
+                  >
+                    إضافة خانة
+                  </Button>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid size={{ xs: 12, lg: 7 }}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  الخانات الحالية
+                </Typography>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>الخانة</TableCell>
+                      <TableCell>النوع</TableCell>
+                      <TableCell>الوحدة</TableCell>
+                      <TableCell>الإذن النهائي</TableCell>
+                      <TableCell>إجراء</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {customFields.map((field) => (
+                      <TableRow key={field.id}>
+                        <TableCell>{field.label}</TableCell>
+                        <TableCell>{field.kind === 'number' ? 'رقمي' : 'نصي'}</TableCell>
+                        <TableCell>{field.unit || '-'}</TableCell>
+                        <TableCell>
+                          <Checkbox
+                            checked={field.showInFinalApproval}
+                            onChange={async (event) => {
+                              await saveSettings({
+                                customFields: customFields.map((item) =>
+                                  item.id === field.id
+                                    ? {
+                                        ...item,
+                                        showInFinalApproval: event.target.checked
+                                      }
+                                    : item
+                                )
+                              });
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            color="error"
+                            onClick={async () => {
+                              await saveSettings({
+                                customFields: customFields.filter(
+                                  (item) => item.id !== field.id
+                                )
+                              });
+                              setMessage(`تم حذف الخانة ${field.label}.`);
+                            }}
+                          >
+                            حذف
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {customFields.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5}>
+                          لا توجد خانات مخصصة بعد.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      ) : null}
+
       {tab === 'settings' ? (
         <Card>
           <CardContent>
@@ -588,6 +1072,30 @@ export function AdminPage() {
                 onChange={(_, value) => saveSettings({ requiredApproverIds: value.map((item) => item.id) })}
                 renderInput={(params) => <TextField {...params} label="المعتمدون الافتراضيون" />}
               />
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="مدة صلاحية التوكن بالساعات"
+                    value={settings?.sessionTtlHours ?? 12}
+                    onChange={(event) =>
+                      saveSettings({ sessionTtlHours: Number(event.target.value) || 12 })
+                    }
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="مهلة الخمول بالدقائق"
+                    value={settings?.sessionIdleMinutes ?? 90}
+                    onChange={(event) =>
+                      saveSettings({ sessionIdleMinutes: Number(event.target.value) || 90 })
+                    }
+                  />
+                </Grid>
+              </Grid>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -597,6 +1105,10 @@ export function AdminPage() {
                 }
                 label="تشغيل صوت الإشعارات"
               />
+              <Alert severity="info">
+                تسجيل الدخول الآن يعتمد على توكن جلسة لكل مستخدم مع مدة صلاحية ومراقبة
+                خمول قابلة للتخصيص من هذه الشاشة.
+              </Alert>
               <Button
                 variant="contained"
                 startIcon={<SaveRoundedIcon />}

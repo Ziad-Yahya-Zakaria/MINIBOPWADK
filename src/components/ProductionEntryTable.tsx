@@ -1,0 +1,341 @@
+import { useMemo, useState } from 'react';
+import { Box, Chip, Stack, Typography } from '@mui/material';
+import {
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  type ColumnDef
+} from '@tanstack/react-table';
+
+import type { CustomFieldDefinition, EntryLine, ProductDefinition } from '../lib/types';
+import { formatNumber, getCellIndex } from '../lib/utils';
+
+interface ProductionEntryTableProps {
+  entries: EntryLine[];
+  products: ProductDefinition[];
+  shiftLabels: string[];
+  isReadOnly: boolean;
+  customFields: CustomFieldDefinition[];
+  perHourSummary: number[];
+  totalPackages: number;
+  totalKg: number;
+  onHourCommit: (params: {
+    rowIndex: number;
+    entryId: string;
+    hourIndex: number;
+    note: boolean;
+    value: string;
+  }) => Promise<void>;
+  onCustomFieldCommit: (entryId: string, fieldId: string, value: string) => Promise<void>;
+  onPasteHours: (entryId: string, startHourIndex: number, text: string) => Promise<void>;
+}
+
+interface HourCellEditorProps {
+  entry: EntryLine;
+  rowIndex: number;
+  hourIndex: number;
+  label: string;
+  isReadOnly: boolean;
+  onCommit: ProductionEntryTableProps['onHourCommit'];
+  onPasteHours: ProductionEntryTableProps['onPasteHours'];
+}
+
+interface CustomFieldEditorProps {
+  entry: EntryLine;
+  field: CustomFieldDefinition;
+  isReadOnly: boolean;
+  onCommit: ProductionEntryTableProps['onCustomFieldCommit'];
+}
+
+function focusHourTarget(rowIndex: number, hourIndex: number, note = false) {
+  const target = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    `[data-cell="${getCellIndex(rowIndex, hourIndex, note)}"]`
+  );
+  target?.focus();
+}
+
+function HourCellEditor({
+  entry,
+  rowIndex,
+  hourIndex,
+  label,
+  isReadOnly,
+  onCommit,
+  onPasteHours
+}: HourCellEditorProps) {
+  const [value, setValue] = useState(String(entry.hourValues[hourIndex] ?? 0));
+  const [note, setNote] = useState(entry.hourNotes[hourIndex] ?? '');
+
+  return (
+    <Stack spacing={1} sx={{ minWidth: 170 }}>
+      <input
+        type="number"
+        min="0"
+        value={value}
+        data-cell={getCellIndex(rowIndex, hourIndex, false)}
+        readOnly={isReadOnly}
+        aria-label={`كمية ${label}`}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            focusHourTarget(rowIndex, hourIndex + 1);
+          }
+          if (event.key === 'ArrowRight' && hourIndex > 0) {
+            event.preventDefault();
+            focusHourTarget(rowIndex, hourIndex - 1);
+          }
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            focusHourTarget(rowIndex, hourIndex, true);
+          }
+        }}
+        onPaste={async (event) => {
+          const text = event.clipboardData.getData('text');
+          if (!text.includes('\t') && !text.includes('\n')) {
+            return;
+          }
+          event.preventDefault();
+          await onPasteHours(entry.id, hourIndex, text);
+        }}
+        onBlur={async () => {
+          await onCommit({
+            rowIndex,
+            entryId: entry.id,
+            hourIndex,
+            note: false,
+            value
+          });
+        }}
+      />
+      <textarea
+        rows={2}
+        value={note}
+        data-cell={getCellIndex(rowIndex, hourIndex, true)}
+        readOnly={isReadOnly}
+        aria-label={`ملاحظات ${label}`}
+        onChange={(event) => setNote(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            focusHourTarget(rowIndex, hourIndex, false);
+          }
+        }}
+        onBlur={async () => {
+          await onCommit({
+            rowIndex,
+            entryId: entry.id,
+            hourIndex,
+            note: true,
+            value: note
+          });
+        }}
+      />
+    </Stack>
+  );
+}
+
+function CustomFieldEditor({
+  entry,
+  field,
+  isReadOnly,
+  onCommit
+}: CustomFieldEditorProps) {
+  const [value, setValue] = useState(entry.customFieldValues?.[field.id] ?? '');
+
+  return (
+    <Stack spacing={0.75} sx={{ minWidth: 160 }}>
+      <input
+        type={field.kind === 'number' ? 'number' : 'text'}
+        value={value}
+        readOnly={isReadOnly}
+        placeholder={field.placeholder || field.label}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={async () => {
+          await onCommit(entry.id, field.id, value);
+        }}
+      />
+      {field.unit ? (
+        <Typography variant="caption" color="text.secondary">
+          {field.unit}
+        </Typography>
+      ) : null}
+    </Stack>
+  );
+}
+
+export function ProductionEntryTable({
+  entries,
+  products,
+  shiftLabels,
+  isReadOnly,
+  customFields,
+  perHourSummary,
+  totalPackages,
+  totalKg,
+  onHourCommit,
+  onCustomFieldCommit,
+  onPasteHours
+}: ProductionEntryTableProps) {
+  const productsMap = useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products]
+  );
+
+  const columns = useMemo<ColumnDef<EntryLine>[]>(
+    () => [
+      {
+        id: 'product',
+        header: 'المنتج',
+        footer: () => 'تجميع الساعة',
+        cell: ({ row }) => {
+          const product = productsMap.get(row.original.productId);
+          return (
+            <Stack spacing={0.5} sx={{ minWidth: 260 }}>
+              <Typography fontWeight={700}>{product?.name ?? '-'}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {product?.code ?? '-'} | وزن العبوة: {formatNumber(product?.packageWeightKg ?? 0)} كجم
+              </Typography>
+            </Stack>
+          );
+        }
+      },
+      ...customFields.map<ColumnDef<EntryLine>>((field) => ({
+        id: `custom-${field.id}`,
+        header: field.label,
+        footer: () => (field.showInFinalApproval ? 'يظهر بالإذن' : 'داخلي فقط'),
+        cell: ({ row }) => (
+          <CustomFieldEditor
+            key={`${row.original.id}:${field.id}:${row.original.customFieldValues?.[field.id] ?? ''}`}
+            entry={row.original}
+            field={field}
+            isReadOnly={isReadOnly}
+            onCommit={onCustomFieldCommit}
+          />
+        )
+      })),
+      ...shiftLabels.map<ColumnDef<EntryLine>>((label, hourIndex) => ({
+        id: `hour-${hourIndex}`,
+        header: label,
+        footer: () => formatNumber(perHourSummary[hourIndex] ?? 0),
+        cell: ({ row }) => (
+          <HourCellEditor
+            key={`${row.original.id}:${hourIndex}:${row.original.hourValues[hourIndex] ?? 0}:${row.original.hourNotes[hourIndex] ?? ''}`}
+            entry={row.original}
+            rowIndex={row.index}
+            hourIndex={hourIndex}
+            label={label}
+            isReadOnly={isReadOnly}
+            onCommit={onHourCommit}
+            onPasteHours={onPasteHours}
+          />
+        )
+      })),
+      {
+        id: 'total-packages',
+        header: 'الإجمالي',
+        footer: () => `${formatNumber(totalPackages)} عبوة`,
+        cell: ({ row }) => {
+          const packages = row.original.hourValues.reduce(
+            (sum, current) => sum + Number(current || 0),
+            0
+          );
+          return (
+            <Typography fontWeight={700}>{formatNumber(packages)}</Typography>
+          );
+        }
+      },
+      {
+        id: 'total-kg',
+        header: 'الكيلو',
+        footer: () => `${formatNumber(totalKg)} كجم`,
+        cell: ({ row }) => {
+          const product = productsMap.get(row.original.productId);
+          const packages = row.original.hourValues.reduce(
+            (sum, current) => sum + Number(current || 0),
+            0
+          );
+          return (
+            <Typography fontWeight={700}>
+              {formatNumber(packages * (product?.packageWeightKg ?? 0))}
+            </Typography>
+          );
+        }
+      }
+    ],
+    [
+      customFields,
+      isReadOnly,
+      onCustomFieldCommit,
+      onHourCommit,
+      onPasteHours,
+      perHourSummary,
+      productsMap,
+      shiftLabels,
+      totalKg,
+      totalPackages
+    ]
+  );
+
+  // TanStack Table manages internal table factories that React Compiler flags conservatively.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const table = useReactTable({
+    data: entries,
+    columns,
+    getCoreRowModel: getCoreRowModel()
+  });
+
+  return (
+    <Box sx={{ overflow: 'auto' }}>
+      <table className="tanstack-grid">
+        <thead>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <th key={header.id}>
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {table.getRowModel().rows.map((row) => (
+            <tr key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <td key={cell.id}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          {table.getFooterGroups().map((footerGroup) => (
+            <tr key={footerGroup.id}>
+              {footerGroup.headers.map((header, index) => (
+                <td key={header.id}>
+                  {index === 0 ? (
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                      <Typography fontWeight={800}>
+                        {flexRender(header.column.columnDef.footer, header.getContext())}
+                      </Typography>
+                      <Chip size="small" label={`عدد البنود: ${entries.length}`} />
+                    </Stack>
+                  ) : (
+                    flexRender(header.column.columnDef.footer, header.getContext())
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tfoot>
+      </table>
+    </Box>
+  );
+}

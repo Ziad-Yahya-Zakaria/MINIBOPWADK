@@ -32,30 +32,38 @@ body {
   background: rgba(255, 255, 255, 0.72);
 }
 
-.production-grid {
+.production-grid,
+.tanstack-grid {
   width: 100%;
   border-collapse: collapse;
 }
 
 .production-grid th,
-.production-grid td {
+.production-grid td,
+.tanstack-grid th,
+.tanstack-grid td {
   border: 1px solid rgba(148, 163, 184, 0.22);
   padding: 8px;
   vertical-align: top;
 }
 
 .production-grid input,
-.production-grid textarea {
+.production-grid textarea,
+.tanstack-grid input,
+.tanstack-grid textarea {
   width: 100%;
-  border: 0;
-  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(248, 250, 252, 0.9);
   color: inherit;
   font: inherit;
   outline: none;
   resize: none;
 }
 
-.production-grid thead th {
+.production-grid thead th,
+.tanstack-grid thead th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -63,8 +71,31 @@ body {
   backdrop-filter: blur(10px);
 }
 
+.tanstack-grid tfoot td {
+  background: rgba(15, 118, 110, 0.08);
+  font-weight: 700;
+}
+
 .metric-chip {
   padding: 8px 12px;
   border-radius: 999px;
   background: rgba(21, 94, 239, 0.08);
+}
+
+.about-icon-shell {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(11, 90, 70, 0.12), rgba(19, 128, 101, 0.2));
+  color: #0b5a46;
+}
+
+.about-pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(11, 90, 70, 0.08);
+  color: #0b5a46;
+  font-weight: 700;
 }

@@ -5,8 +5,12 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   Container,
+  FormControlLabel,
+  FormGroup,
+  MenuItem,
   Stack,
   Tab,
   Tabs,
@@ -23,10 +27,13 @@ import {
   isDeveloperVaultAnswerValid,
   type DeveloperVaultChallenge
 } from '../lib/developerVault';
+import { ACCESS_PROFILES, getAccessProfile } from '../lib/accessProfiles';
 import type { AccountPackage, AccountPackageKind } from '../lib/types';
+import { ALL_PERMISSIONS } from '../lib/types';
 import { downloadBlob } from '../lib/utils';
 
 interface VaultFormState {
+  profileId: string;
   packageKind: AccountPackageKind;
   username: string;
   displayName: string;
@@ -42,6 +49,7 @@ interface VaultFormState {
 function createPreset(kind: AccountPackageKind, instanceId: string): VaultFormState {
   if (kind === 'bootstrap') {
     return {
+      profileId: 'bootstrap-admin',
       packageKind: 'bootstrap',
       username: 'admin',
       displayName: 'Primary Administrator',
@@ -56,6 +64,7 @@ function createPreset(kind: AccountPackageKind, instanceId: string): VaultFormSt
   }
 
   return {
+    profileId: 'operations-user',
     packageKind: 'user',
     username: 'user1',
     displayName: 'New User',
@@ -248,6 +257,34 @@ export function DeveloperVaultPage() {
                   </Stack>
 
                   <TextField
+                    select
+                    fullWidth
+                    label="قالب الحساب"
+                    value={form.profileId}
+                    onChange={(event) => {
+                      const profile = getAccessProfile(event.target.value);
+                      if (!profile) {
+                        return;
+                      }
+                      setForm((current) => ({
+                        ...current,
+                        profileId: profile.id,
+                        packageKind: profile.packageKind ?? current.packageKind,
+                        roles: profile.roles.join(', '),
+                        permissions: profile.permissions.join(', ')
+                      }));
+                    }}
+                  >
+                    {ACCESS_PROFILES.filter((profile) =>
+                      profile.packageKind ? profile.packageKind === form.packageKind : true
+                    ).map((profile) => (
+                      <MenuItem key={profile.id} value={profile.id}>
+                        {profile.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  <TextField
                     fullWidth
                     label="Roles"
                     value={form.roles}
@@ -264,6 +301,36 @@ export function DeveloperVaultPage() {
                       setForm((current) => ({ ...current, permissions: event.target.value }))
                     }
                   />
+                  <FormGroup>
+                    {ALL_PERMISSIONS.map((permission) => (
+                      <FormControlLabel
+                        key={permission}
+                        control={
+                          <Checkbox
+                            checked={
+                              form.permissions.includes('*') ||
+                              form.permissions.split(',').map((item) => item.trim()).includes(permission)
+                            }
+                            onChange={(event) => {
+                              const currentPermissions = form.permissions
+                                .split(',')
+                                .map((item) => item.trim())
+                                .filter(Boolean)
+                                .filter((item) => item !== '*');
+                              const nextPermissions = event.target.checked
+                                ? [...new Set([...currentPermissions, permission])]
+                                : currentPermissions.filter((item) => item !== permission);
+                              setForm((current) => ({
+                                ...current,
+                                permissions: nextPermissions.join(', ')
+                              }));
+                            }}
+                          />
+                        }
+                        label={permission}
+                      />
+                    ))}
+                  </FormGroup>
 
                   <TextField
                     fullWidth

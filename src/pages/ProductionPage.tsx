@@ -1,12 +1,10 @@
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   Autocomplete,
-  Box,
   Button,
   Card,
   CardContent,
-  Chip,
   FormControl,
   Grid,
   InputLabel,
@@ -23,10 +21,25 @@ import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import { useLiveQuery } from 'dexie-react-hooks';
 
+import { ProductionEntryTable } from '../components/ProductionEntryTable';
 import { useAppContext } from '../context/AppContext';
 import { appDb, pushNotification } from '../lib/db';
-import type { BrandDefinition, EntryLine, ProductDefinition, ProductionBatch } from '../lib/types';
-import { batchSummary, emptyHourNotes, emptyHourValues, formatNumber, getCellIndex, getShiftLabels, nowIso, todayIsoDate, uid } from '../lib/utils';
+import type {
+  BrandDefinition,
+  EntryLine,
+  ProductDefinition,
+  ProductionBatch
+} from '../lib/types';
+import {
+  batchSummary,
+  emptyHourNotes,
+  emptyHourValues,
+  formatNumber,
+  getShiftLabels,
+  nowIso,
+  todayIsoDate,
+  uid
+} from '../lib/utils';
 
 export function ProductionPage() {
   const { currentUser, settings } = useAppContext();
@@ -42,24 +55,42 @@ export function ProductionPage() {
   const today = todayIsoDate();
 
   const userBatches = useMemo(
-    () => batches.filter((batch) => batch.createdByUserId === currentUser?.id && batch.date === today),
+    () =>
+      batches.filter(
+        (batch) => batch.createdByUserId === currentUser?.id && batch.date === today
+      ),
     [batches, currentUser?.id, today]
   );
 
   const effectiveShiftId = selectedShiftId || shifts[0]?.id || '';
   const effectiveBrandId =
-    activeBrandId && selectedBrandIds.includes(activeBrandId) ? activeBrandId : selectedBrandIds[0] || '';
+    activeBrandId && selectedBrandIds.includes(activeBrandId)
+      ? activeBrandId
+      : selectedBrandIds[0] || '';
 
   const activeShift = shifts.find((shift) => shift.id === effectiveShiftId);
+  const shiftLabels = getShiftLabels(activeShift);
   const activeBrand = brands.find((brand) => brand.id === effectiveBrandId);
   const activeBatch =
-    userBatches.find((batch) => batch.brandId === effectiveBrandId && batch.shiftId === effectiveShiftId && batch.status === 'draft') ??
-    userBatches.find((batch) => batch.brandId === effectiveBrandId && batch.shiftId === effectiveShiftId);
+    userBatches.find(
+      (batch) =>
+        batch.brandId === effectiveBrandId &&
+        batch.shiftId === effectiveShiftId &&
+        batch.status === 'draft'
+    ) ??
+    userBatches.find(
+      (batch) =>
+        batch.brandId === effectiveBrandId && batch.shiftId === effectiveShiftId
+    );
   const isReadOnly = activeBatch?.status !== 'draft';
+  const customFields = settings?.customFields ?? [];
 
-  const activeProducts = products.filter((product) => activeBrand?.productIds.includes(product.id));
+  const activeProducts = products.filter((product) =>
+    activeBrand?.productIds.includes(product.id)
+  );
   const availableProducts = activeProducts.filter(
-    (product) => !activeBatch?.entries.some((entry) => entry.productId === product.id)
+    (product) =>
+      !activeBatch?.entries.some((entry) => entry.productId === product.id)
   );
   const summary = batchSummary(activeBatch?.entries ?? [], products, activeShift);
 
@@ -71,18 +102,14 @@ export function ProductionPage() {
           batch.shiftId === effectiveShiftId &&
           batch.status === 'draft'
       ) ??
-      (await appDb.batches
-        .toArray()
-        .then((rows) =>
-          rows.find(
-            (batch) =>
-              batch.brandId === brandId &&
-              batch.shiftId === effectiveShiftId &&
-              batch.createdByUserId === currentUser?.id &&
-              batch.date === today &&
-              batch.status === 'draft'
-          )
-        ));
+      (await appDb.batches.toArray()).find(
+        (batch) =>
+          batch.brandId === brandId &&
+          batch.shiftId === effectiveShiftId &&
+          batch.createdByUserId === currentUser?.id &&
+          batch.date === today &&
+          batch.status === 'draft'
+      );
 
     if (existing) {
       return existing;
@@ -107,24 +134,34 @@ export function ProductionPage() {
   }
 
   async function mutateBatch(update: (batch: ProductionBatch) => ProductionBatch) {
-    if (!activeBatch) {
+    if (!activeBatch?.id) {
       return;
     }
-    await appDb.batches.put(update(activeBatch));
+
+    const latest = await appDb.batches.get(activeBatch.id);
+    if (!latest) {
+      return;
+    }
+
+    await appDb.batches.put(update(latest));
   }
 
   async function addProduct(product: ProductDefinition | null) {
-    if (!product || !activeBrandId) {
+    if (!product || !effectiveBrandId) {
       return;
     }
-    const draft = await ensureDraft(activeBrandId);
-    const hourCount = getShiftLabels(activeShift).length;
+
+    const draft = await ensureDraft(effectiveBrandId);
     const line: EntryLine = {
       id: uid('line'),
       productId: product.id,
-      hourValues: emptyHourValues(hourCount),
-      hourNotes: emptyHourNotes(hourCount)
+      hourValues: emptyHourValues(shiftLabels.length),
+      hourNotes: emptyHourNotes(shiftLabels.length),
+      customFieldValues: Object.fromEntries(
+        customFields.map((field) => [field.id, ''])
+      )
     };
+
     await appDb.batches.put({
       ...draft,
       entries: [...draft.entries, line],
@@ -132,15 +169,7 @@ export function ProductionPage() {
     });
   }
 
-  function focusTarget(productIndex: number, hourIndex: number, note = false) {
-    const target = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-      `[data-cell="${getCellIndex(productIndex, hourIndex, note)}"]`
-    );
-    target?.focus();
-  }
-
   async function updateEntry(
-    productIndex: number,
     entryId: string,
     hourIndex: number,
     note: boolean,
@@ -163,7 +192,8 @@ export function ProductionPage() {
         }
 
         const nextValues = [...entry.hourValues];
-        nextValues[hourIndex] = Number(rawValue || 0);
+        const parsed = Number(rawValue || 0);
+        nextValues[hourIndex] = Number.isFinite(parsed) ? parsed : 0;
         return {
           ...entry,
           hourValues: nextValues
@@ -175,11 +205,71 @@ export function ProductionPage() {
     if (settings?.soundEnabled) {
       playInputTone();
     }
+  }
 
-    focusTarget(productIndex, hourIndex + 1);
+  async function updateCustomField(
+    entryId: string,
+    fieldId: string,
+    rawValue: string
+  ) {
+    await mutateBatch((batch) => ({
+      ...batch,
+      entries: batch.entries.map((entry) =>
+        entry.id === entryId
+          ? {
+              ...entry,
+              customFieldValues: {
+                ...entry.customFieldValues,
+                [fieldId]: rawValue
+              }
+            }
+          : entry
+      ),
+      lastUpdatedAt: nowIso()
+    }));
+  }
+
+  async function pasteHours(
+    entryId: string,
+    startHourIndex: number,
+    text: string
+  ) {
+    const cells = text
+      .trim()
+      .split(/\t|\r?\n/)
+      .map((item) => {
+        const parsed = Number(item.trim() || 0);
+        return Number.isFinite(parsed) ? parsed : 0;
+      });
+
+    await mutateBatch((batch) => ({
+      ...batch,
+      entries: batch.entries.map((entry) => {
+        if (entry.id !== entryId) {
+          return entry;
+        }
+
+        const nextValues = [...entry.hourValues];
+        cells.forEach((cell, cellIndex) => {
+          if (startHourIndex + cellIndex < nextValues.length) {
+            nextValues[startHourIndex + cellIndex] = cell;
+          }
+        });
+
+        return {
+          ...entry,
+          hourValues: nextValues
+        };
+      }),
+      lastUpdatedAt: nowIso()
+    }));
   }
 
   function playInputTone() {
+    if (typeof window.AudioContext === 'undefined') {
+      return;
+    }
+
     const audioContext = new window.AudioContext();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -187,6 +277,9 @@ export function ProductionPage() {
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
     gainNode.gain.value = 0.015;
+    oscillator.onended = () => {
+      void audioContext.close();
+    };
     oscillator.start();
     oscillator.stop(audioContext.currentTime + 0.08);
   }
@@ -202,7 +295,13 @@ export function ProductionPage() {
           ? settings.requiredApproverIds
           : [currentUser!.id]
     });
-    await pushNotification('إنتاج جديد', `تم إرسال إنتاج البراند ${brands.find((item) => item.id === batch.brandId)?.name ?? ''} للاعتماد.`, 'info');
+    await pushNotification(
+      'إنتاج جديد',
+      `تم إرسال إنتاج البراند ${
+        brands.find((item) => item.id === batch.brandId)?.name ?? ''
+      } للاعتماد.`,
+      'info'
+    );
   }
 
   return (
@@ -219,7 +318,7 @@ export function ProductionPage() {
                 <Select
                   labelId="shift-select"
                   label="الوردية"
-                    value={effectiveShiftId}
+                  value={effectiveShiftId}
                   onChange={(event) => setSelectedShiftId(event.target.value)}
                 >
                   {shifts.map((shift) => (
@@ -241,9 +340,17 @@ export function ProductionPage() {
                   if (newValue[0]) {
                     setActiveBrandId(newValue[0].id);
                     await ensureDraft(newValue[0].id);
+                  } else {
+                    setActiveBrandId('');
                   }
                 }}
-                renderInput={(params) => <TextField {...params} label="البراندات" placeholder="اختر البراندات" />}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="البراندات"
+                    placeholder="اختر البراندات"
+                  />
+                )}
               />
             </Grid>
           </Grid>
@@ -253,7 +360,11 @@ export function ProductionPage() {
       {selectedBrandIds.length > 0 ? (
         <Card>
           <CardContent>
-            <Tabs value={activeBrandId} onChange={(_, value) => setActiveBrandId(value)} variant="scrollable">
+            <Tabs
+              value={activeBrandId}
+              onChange={(_, value) => setActiveBrandId(value)}
+              variant="scrollable"
+            >
               {brands
                 .filter((brand) => selectedBrandIds.includes(brand.id))
                 .map((brand) => (
@@ -272,20 +383,28 @@ export function ProductionPage() {
         <Stack spacing={2}>
           <Card>
             <CardContent>
-              <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} alignItems={{ lg: 'center' }}>
+              <Stack
+                direction={{ xs: 'column', lg: 'row' }}
+                spacing={2}
+                alignItems={{ lg: 'center' }}
+              >
                 <Autocomplete
                   sx={{ flex: 1 }}
                   options={availableProducts}
                   getOptionLabel={(option) => `${option.name} - ${option.code}`}
                   onChange={(_, value) => {
-                    addProduct(value);
+                    void addProduct(value);
                   }}
-                  renderInput={(params) => <TextField {...params} label="إضافة منتج" />}
+                  renderInput={(params) => (
+                    <TextField {...params} label="إضافة منتج" />
+                  )}
                 />
                 <Button
                   variant="outlined"
                   startIcon={<SaveRoundedIcon />}
-                  onClick={() => setMessage('تم حفظ المسودة محلياً داخل قاعدة بيانات المتصفح.')}
+                  onClick={() =>
+                    setMessage('تم حفظ المسودة محلياً داخل قاعدة بيانات المتصفح.')
+                  }
                 >
                   حفظ مسودة
                 </Button>
@@ -293,7 +412,11 @@ export function ProductionPage() {
                   variant="contained"
                   color="secondary"
                   startIcon={<SendRoundedIcon />}
-                  disabled={!activeBatch || activeBatch.entries.length === 0 || activeBatch.status !== 'draft'}
+                  disabled={
+                    !activeBatch ||
+                    activeBatch.entries.length === 0 ||
+                    activeBatch.status !== 'draft'
+                  }
                   onClick={async () => {
                     if (activeBatch) {
                       await submitBatch(activeBatch);
@@ -329,126 +452,34 @@ export function ProductionPage() {
             <CardContent>
               <Stack spacing={2}>
                 <Typography variant="h6">
-                  شبكة الإدخال الشبيهة بالإكسيل - {activeBrand.name}
+                  شبكة إدخال الإنتاج المبنية على TanStack Table - {activeBrand.name}
                 </Typography>
-                {activeBatch?.status && activeBatch.status !== 'draft' ? (
-                  <Alert severity="info">هذا البراند تم إرساله للاعتماد، لذا يظهر هنا للقراءة فقط.</Alert>
+                {customFields.length > 0 ? (
+                  <Alert severity="info">
+                    تم تفعيل {customFields.length} حقل إضافي، والحقول المعلّمة
+                    ستظهر في الإذن النهائي بعد الاعتماد.
+                  </Alert>
                 ) : null}
-                <Box sx={{ overflow: 'auto' }}>
-                  <table className="production-grid">
-                    <thead>
-                      <tr>
-                        <th style={{ minWidth: 220 }}>المنتج</th>
-                        {getShiftLabels(activeShift).map((label) => (
-                          <th key={label} style={{ minWidth: 128 }}>
-                            {label}
-                          </th>
-                        ))}
-                        <th style={{ minWidth: 120 }}>الإجمالي</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(activeBatch?.entries ?? []).map((entry, productIndex) => {
-                        const product = products.find((item) => item.id === entry.productId);
-                        const totalPackages = entry.hourValues.reduce((sum, value) => sum + value, 0);
-                        return (
-                          <Fragment key={entry.id}>
-                            <tr key={`${entry.id}-qty`}>
-                              <td>
-                                <Stack spacing={0.5}>
-                                  <Typography fontWeight={700}>{product?.name}</Typography>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {product?.code} | وزن العبوة: {formatNumber(product?.packageWeightKg ?? 0)} كجم
-                                  </Typography>
-                                </Stack>
-                              </td>
-                              {entry.hourValues.map((value, hourIndex) => (
-                                <td key={`${entry.id}-${hourIndex}`}>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    defaultValue={value}
-                                    data-cell={getCellIndex(productIndex, hourIndex, false)}
-                                    readOnly={isReadOnly}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'ArrowLeft') {
-                                        event.preventDefault();
-                                        focusTarget(productIndex, hourIndex + 1);
-                                      }
-                                      if (event.key === 'ArrowRight' && hourIndex > 0) {
-                                        event.preventDefault();
-                                        focusTarget(productIndex, hourIndex - 1);
-                                      }
-                                      if (event.key === 'ArrowDown') {
-                                        event.preventDefault();
-                                        focusTarget(productIndex, hourIndex, true);
-                                      }
-                                    }}
-                                    onPaste={async (event) => {
-                                      const text = event.clipboardData.getData('text');
-                                      if (!text.includes('\t') && !text.includes('\n')) {
-                                        return;
-                                      }
-                                      event.preventDefault();
-                                      const cells = text
-                                        .split(/\t|\n/)
-                                        .map((item) => Number(item.trim() || 0))
-                                        .filter((item) => !Number.isNaN(item));
-                                      await mutateBatch((batch) => ({
-                                        ...batch,
-                                        entries: batch.entries.map((item) => {
-                                          if (item.id !== entry.id) {
-                                            return item;
-                                          }
-                                          const next = [...item.hourValues];
-                                          cells.forEach((cell, cellIndex) => {
-                                            if (hourIndex + cellIndex < next.length) {
-                                              next[hourIndex + cellIndex] = cell;
-                                            }
-                                          });
-                                          return { ...item, hourValues: next };
-                                        })
-                                      }));
-                                    }}
-                                    onBlur={async (event) => {
-                                      await updateEntry(productIndex, entry.id, hourIndex, false, event.target.value);
-                                    }}
-                                  />
-                                </td>
-                              ))}
-                              <td>{formatNumber(totalPackages)}</td>
-                            </tr>
-                            <tr key={`${entry.id}-notes`}>
-                              <td>
-                                <Chip label="ملاحظات كل ساعة" size="small" />
-                              </td>
-                              {entry.hourNotes.map((note, hourIndex) => (
-                                <td key={`${entry.id}-${hourIndex}-note`}>
-                                  <textarea
-                                    rows={2}
-                                    defaultValue={note}
-                                    data-cell={getCellIndex(productIndex, hourIndex, true)}
-                                    readOnly={isReadOnly}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'ArrowUp') {
-                                        event.preventDefault();
-                                        focusTarget(productIndex, hourIndex, false);
-                                      }
-                                    }}
-                                    onBlur={async (event) => {
-                                      await updateEntry(productIndex, entry.id, hourIndex, true, event.target.value);
-                                    }}
-                                  />
-                                </td>
-                              ))}
-                              <td />
-                            </tr>
-                          </Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </Box>
+                {activeBatch?.status && activeBatch.status !== 'draft' ? (
+                  <Alert severity="info">
+                    هذا البراند تم إرساله للاعتماد، لذا يظهر هنا للقراءة فقط.
+                  </Alert>
+                ) : null}
+                <ProductionEntryTable
+                  entries={activeBatch?.entries ?? []}
+                  products={products}
+                  shiftLabels={shiftLabels}
+                  isReadOnly={isReadOnly}
+                  customFields={customFields}
+                  perHourSummary={summary.perHour}
+                  totalPackages={summary.totalPackages}
+                  totalKg={summary.totalKg}
+                  onHourCommit={async ({ entryId, hourIndex, note, value }) => {
+                    await updateEntry(entryId, hourIndex, note, value);
+                  }}
+                  onCustomFieldCommit={updateCustomField}
+                  onPasteHours={pasteHours}
+                />
               </Stack>
             </CardContent>
           </Card>
@@ -461,17 +492,23 @@ export function ProductionPage() {
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 {summary.perHour.map((value, index) => (
                   <div className="metric-chip" key={`hour-total-${index}`}>
-                    {getShiftLabels(activeShift)[index]}: {formatNumber(value)}
+                    {shiftLabels[index]}: {formatNumber(value)}
                   </div>
                 ))}
-                <div className="metric-chip">الإجمالي: {formatNumber(summary.totalPackages)} عبوة</div>
-                <div className="metric-chip">الإجمالي: {formatNumber(summary.totalKg)} كجم</div>
+                <div className="metric-chip">
+                  الإجمالي: {formatNumber(summary.totalPackages)} عبوة
+                </div>
+                <div className="metric-chip">
+                  الإجمالي: {formatNumber(summary.totalKg)} كجم
+                </div>
               </Stack>
             </CardContent>
           </Card>
         </Stack>
       ) : (
-        <Alert severity="info">اختر وردية وبراند واحد على الأقل لبدء إدخال الإنتاج.</Alert>
+        <Alert severity="info">
+          اختر وردية وبراند واحد على الأقل لبدء إدخال الإنتاج.
+        </Alert>
       )}
     </Stack>
   );
