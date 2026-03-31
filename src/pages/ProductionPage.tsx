@@ -14,6 +14,7 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
@@ -21,6 +22,7 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { ProductionEntryTable } from '../components/ProductionEntryTable';
+import { ProductionEntryModal } from '../components/ProductionEntryModal';
 import { useAppContext } from '../context/AppContext';
 import { appDb, pushNotification } from '../lib/db';
 import type {
@@ -63,6 +65,7 @@ export function ProductionPage() {
   const [shiftMenuOpen, setShiftMenuOpen] = useState(false);
   const [brandsSearchOpen, setBrandsSearchOpen] = useState(false);
   const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [entryModalOpen, setEntryModalOpen] = useState(false);
   const today = todayIsoDate();
 
   const userBatches = useMemo(
@@ -145,7 +148,7 @@ export function ProductionPage() {
 
   async function mutateBatch(update: (batch: ProductionBatch) => ProductionBatch) {
     if (!activeBatch?.id) {
-      return;
+      return false;
     }
 
     const latest = await appDb.batches.get(activeBatch.id);
@@ -178,6 +181,52 @@ export function ProductionPage() {
     setMessage('تم الحفظ السريع للمسودة. اختصار لوحة المفاتيح: Ctrl+S');
   }
 
+  async function addEntryFromModal(payload: {
+    productId: string;
+    hourValues: number[];
+    hourNotes: string[];
+    customFieldValues: Record<string, string>;
+  }): Promise<boolean> {
+    if (!effectiveBrandId) {
+      setError('اختر براندًا أولًا قبل إضافة الصف.');
+      return false;
+    }
+
+    const product = activeProducts.find((item) => item.id === payload.productId);
+    if (!product) {
+      setError('الصنف المحدد غير متاح داخل البراند الحالي.');
+      return false;
+    }
+
+    const draft = await ensureDraft(effectiveBrandId);
+    if (draft.entries.some((entry) => entry.productId === product.id)) {
+      setError(`الصنف ${product.name} موجود بالفعل داخل الجدول.`);
+      return false;
+    }
+
+    const entry = buildEntry(product.id);
+    entry.hourValues = payload.hourValues;
+    entry.hourNotes = payload.hourNotes;
+    entry.customFieldValues = {
+      ...entry.customFieldValues,
+      ...payload.customFieldValues
+    };
+
+    await appDb.batches.put({
+      ...draft,
+      entries: [...draft.entries, entry],
+      lastUpdatedAt: nowIso()
+    });
+
+    if (settings?.soundEnabled && payload.hourValues.some((value) => value > 0)) {
+      playInputTone();
+    }
+
+    setError(null);
+    setMessage(`تمت إضافة الصنف ${product.name} إلى الجدول بنجاح.`);
+    return true;
+  }
+
   async function addProduct(product: ProductDefinition | null) {
     if (!product || !effectiveBrandId) {
       return;
@@ -195,6 +244,7 @@ export function ProductionPage() {
       lastUpdatedAt: nowIso()
     });
     setError(null);
+    setMessage(`تمت إضافة الصنف ${product.name} كصف فارغ داخل الجدول.`);
   }
 
   async function assignProduct(entryId: string | null, productId: string) {
@@ -368,13 +418,13 @@ export function ProductionPage() {
     'alt+p',
     (event) => {
       event.preventDefault();
-      setProductSearchOpen(true);
-      window.setTimeout(() => {
-        document.getElementById('product-picker-input')?.focus();
-      }, 0);
+      if (!activeBrand || isReadOnly || availableProducts.length === 0) {
+        return;
+      }
+      setEntryModalOpen(true);
     },
     { enableOnFormTags: true },
-    []
+    [activeBrand, availableProducts.length, isReadOnly]
   );
 
   return (
@@ -387,7 +437,7 @@ export function ProductionPage() {
             <HeaderBadge>Ctrl+S حفظ سريع</HeaderBadge>
             <HeaderBadge>Alt+W الوردية</HeaderBadge>
             <HeaderBadge>Alt+B البراند</HeaderBadge>
-            <HeaderBadge>Alt+P إضافة صنف</HeaderBadge>
+            <HeaderBadge>Alt+P نموذج إضافة</HeaderBadge>
           </>
         }
       />
@@ -479,6 +529,7 @@ export function ProductionPage() {
                 <span className="ag-shortcut-chip">Enter اعتماد الخلية</span>
                 <span className="ag-shortcut-chip">Ctrl+S حفظ فوري</span>
                 <span className="ag-shortcut-chip">Alt+B فتح البراندات</span>
+                <span className="ag-shortcut-chip">Alt+P نموذج إضافة</span>
               </div>
               <Typography variant="body2" color="text.secondary">
                 الجدول يدعم صفوفًا فارغة مستمرة، واختيار الصنف من داخل الخلية مباشرة.
@@ -508,6 +559,17 @@ export function ProductionPage() {
 
       {activeBrand ? (
         <Stack spacing={2}>
+          {entryModalOpen ? (
+            <ProductionEntryModal
+              open={entryModalOpen}
+              products={availableProducts}
+              shiftLabels={shiftLabels}
+              customFields={customFields}
+              onClose={() => setEntryModalOpen(false)}
+              onSubmit={addEntryFromModal}
+            />
+          ) : null}
+
           <UiCard>
             <CardHeader>
               <CardTitle>أدوات التشغيل السريع</CardTitle>
@@ -521,6 +583,15 @@ export function ProductionPage() {
                 spacing={2}
                 alignItems={{ xl: 'center' }}
               >
+                <Button
+                  sx={{ minWidth: { xs: '100%', xl: 220 } }}
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  disabled={isReadOnly || availableProducts.length === 0}
+                  onClick={() => setEntryModalOpen(true)}
+                >
+                  إضافة عبر النموذج
+                </Button>
                 <Autocomplete
                   sx={{ flex: 1 }}
                   open={productSearchOpen}
