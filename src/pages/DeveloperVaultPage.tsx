@@ -108,16 +108,15 @@ export function DeveloperVaultPage() {
 
   return (
     <Box
+      className="public-screen"
       sx={{
         minHeight: '100dvh',
-        py: 5,
-        background:
-          'radial-gradient(circle at top right, rgba(21,94,239,.18), transparent 25%), radial-gradient(circle at bottom left, rgba(15,118,110,.16), transparent 24%)'
+        py: 5
       }}
     >
       <Container maxWidth="md">
         <Stack spacing={3}>
-          <Card sx={{ borderRadius: 6 }}>
+          <Card className="public-card" sx={{ borderRadius: 6 }}>
             <CardContent sx={{ p: 4 }}>
               <Stack spacing={2}>
                 <Stack direction="row" spacing={1.5} alignItems="center">
@@ -184,7 +183,7 @@ export function DeveloperVaultPage() {
           </Card>
 
           {unlocked ? (
-            <Card sx={{ borderRadius: 6 }}>
+            <Card className="public-card" sx={{ borderRadius: 6 }}>
               <CardContent sx={{ p: 4 }}>
                 <Stack spacing={3}>
                   <Tabs
@@ -409,7 +408,7 @@ export function DeveloperVaultPage() {
                         p: 2,
                         borderRadius: 4,
                         overflow: 'auto',
-                        backgroundColor: 'rgba(15,23,42,.08)',
+                        backgroundColor: 'action.hover',
                         direction: 'ltr',
                         textAlign: 'left'
                       }}

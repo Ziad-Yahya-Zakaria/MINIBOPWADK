@@ -10,7 +10,15 @@ export function StatCard({
   hint?: string;
 }) {
   return (
-    <Card sx={{ height: '100%', background: 'linear-gradient(135deg, rgba(21,94,239,.10), rgba(15,118,110,.06))' }}>
+    <Card
+      sx={{
+        height: '100%',
+        background: (theme) =>
+          theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(60,199,158,.16), rgba(241,178,75,.10))'
+            : 'linear-gradient(135deg, rgba(15,122,93,.10), rgba(201,133,18,.08))'
+      }}
+    >
       <CardContent>
         <Stack spacing={1}>
           <Typography variant="body2" color="text.secondary">

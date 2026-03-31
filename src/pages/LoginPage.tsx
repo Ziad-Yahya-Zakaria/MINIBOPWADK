@@ -36,16 +36,15 @@ export function LoginPage() {
 
   return (
     <Box
+      className="auth-screen"
       sx={{
         minHeight: '100dvh',
         display: 'grid',
-        placeItems: 'center',
-        background:
-          'radial-gradient(circle at top right, rgba(21,94,239,.18), transparent 25%), radial-gradient(circle at bottom left, rgba(15,118,110,.16), transparent 24%)'
+        placeItems: 'center'
       }}
     >
       <Container maxWidth="sm">
-        <Card sx={{ borderRadius: 6, overflow: 'hidden' }}>
+        <Card className="auth-card" sx={{ borderRadius: 6, overflow: 'hidden' }}>
           <CardContent sx={{ p: 4 }}>
             <Stack spacing={2.5}>
               <Typography

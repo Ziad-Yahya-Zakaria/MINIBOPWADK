@@ -4,7 +4,7 @@ import createCache from '@emotion/cache';
 import rtlPlugin from '@mui/stylis-plugin-rtl';
 import { prefixer } from 'stylis';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 
 import { AppProvider, useAppContext } from './context/AppContext';
 import { DEVELOPER_VAULT_ROUTE } from './lib/accountPackageConstants';
@@ -34,6 +34,13 @@ function AppRoutes() {
   const location = useLocation();
   const isDeveloperVaultRoute = location.pathname === DEVELOPER_VAULT_ROUTE;
   const isPublicAboutRoute = location.pathname === '/about';
+  const themeMode = settings?.themeMode ?? 'light';
+
+  useEffect(() => {
+    document.documentElement.style.colorScheme = themeMode;
+    document.body.dataset.themeMode = themeMode;
+    document.documentElement.dataset.themeMode = themeMode;
+  }, [themeMode]);
 
   if (!isReady) {
     return (
@@ -61,7 +68,7 @@ function AppRoutes() {
   }
 
   return (
-    <ThemeProvider theme={createAppTheme(settings?.themeMode ?? 'light')}>
+    <ThemeProvider theme={createAppTheme(themeMode)}>
       <Suspense
         fallback={
           <div className="app-loading-screen">

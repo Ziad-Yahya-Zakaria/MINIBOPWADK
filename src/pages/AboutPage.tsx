@@ -18,11 +18,10 @@ import { Link as RouterLink } from 'react-router-dom';
 export function AboutPage() {
   return (
     <Box
+      className="public-screen"
       sx={{
         minHeight: '100dvh',
-        py: { xs: 4, md: 6 },
-        background:
-          'linear-gradient(180deg, #edf6f2 0%, #f8fbfa 45%, #eef3f1 100%)'
+        py: { xs: 4, md: 6 }
       }}
     >
       <Container maxWidth="lg">
@@ -106,11 +105,11 @@ export function AboutPage() {
           <Grid container spacing={2.5}>
             <Grid size={{ xs: 12, md: 4 }}>
               <Card
+                className="public-card"
                 sx={{
                   height: '100%',
                   borderRadius: 6,
-                  bgcolor: '#fff',
-                  boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)'
+                  bgcolor: 'background.paper'
                 }}
               >
                 <CardContent sx={{ p: 3 }}>
@@ -131,11 +130,11 @@ export function AboutPage() {
 
             <Grid size={{ xs: 12, md: 4 }}>
               <Card
+                className="public-card"
                 sx={{
                   height: '100%',
                   borderRadius: 6,
-                  bgcolor: '#fff',
-                  boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)'
+                  bgcolor: 'background.paper'
                 }}
               >
                 <CardContent sx={{ p: 3 }}>
@@ -156,11 +155,11 @@ export function AboutPage() {
 
             <Grid size={{ xs: 12, md: 4 }}>
               <Card
+                className="public-card"
                 sx={{
                   height: '100%',
                   borderRadius: 6,
-                  bgcolor: '#fff',
-                  boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)'
+                  bgcolor: 'background.paper'
                 }}
               >
                 <CardContent sx={{ p: 3 }}>
@@ -181,10 +180,10 @@ export function AboutPage() {
           </Grid>
 
           <Card
+            className="public-card"
             sx={{
               borderRadius: 6,
-              bgcolor: '#ffffff',
-              boxShadow: '0 18px 40px rgba(15, 23, 42, 0.06)'
+              bgcolor: 'background.paper'
             }}
           >
             <CardContent sx={{ p: { xs: 3, md: 4 } }}>
