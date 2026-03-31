@@ -23,6 +23,7 @@ import DatasetLinkedRoundedIcon from '@mui/icons-material/DatasetLinkedRounded';
 import FactCheckRoundedIcon from '@mui/icons-material/FactCheckRounded';
 import Inventory2RoundedIcon from '@mui/icons-material/Inventory2Rounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
+import MenuOpenRoundedIcon from '@mui/icons-material/MenuOpenRounded';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
@@ -52,7 +53,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const unreadCount = notifications.filter((item) => !item.read).length;
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const openDeveloperVault = useDeveloperVaultTrigger();
+  const resolvedDrawerWidth = isDesktop ? (navCollapsed ? 92 : drawerWidth) : 0;
 
   const items = [
     { path: '/dashboard', label: 'لوحة التحكم', icon: <DashboardRoundedIcon /> },
@@ -72,7 +75,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClick={openDeveloperVault}
         >
           <Typography variant="h5">Minibo Systems</Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ display: navCollapsed ? 'none' : 'block' }}
+          >
             Enterprise Operations Workspace
           </Typography>
         </Stack>
@@ -97,13 +104,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             }}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
+            <ListItemText
+              primary={item.label}
+              sx={{ display: navCollapsed ? 'none' : 'block' }}
+            />
           </ListItemButton>
         ))}
       </List>
       <Box sx={{ mt: 'auto', p: 2 }}>
-        <Typography variant="subtitle2">{currentUser?.displayName}</Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="subtitle2" sx={{ display: navCollapsed ? 'none' : 'block' }}>
+          {currentUser?.displayName}
+        </Typography>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ display: navCollapsed ? 'none' : 'block' }}
+        >
           {currentUser?.username}
         </Typography>
       </Box>
@@ -119,10 +135,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onClose={() => setNavOpen(false)}
         ModalProps={{ keepMounted: true }}
         sx={{
-          width: isDesktop ? drawerWidth : 0,
+          width: resolvedDrawerWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: isDesktop ? drawerWidth : 'min(88vw, 320px)',
+            width: isDesktop ? resolvedDrawerWidth : 'min(88vw, 320px)',
             boxSizing: 'border-box',
             borderLeft: 0,
             borderRight: '1px solid',
@@ -154,6 +170,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               sx={{ display: { xs: 'inline-flex', lg: 'none' } }}
             >
               <MenuRoundedIcon />
+            </IconButton>
+            <IconButton
+              onClick={() => setNavCollapsed((current) => !current)}
+              sx={{ display: { xs: 'none', lg: 'inline-flex' } }}
+            >
+              <MenuOpenRoundedIcon
+                sx={{
+                  transform: navCollapsed ? 'scaleX(-1)' : 'none'
+                }}
+              />
             </IconButton>
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
               <Typography variant="h6">إدارة خطوط الإنتاج واعتمادها</Typography>

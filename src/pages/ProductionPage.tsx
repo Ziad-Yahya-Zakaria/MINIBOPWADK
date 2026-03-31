@@ -3,8 +3,6 @@ import {
   Alert,
   Autocomplete,
   Button,
-  Card,
-  CardContent,
   FormControl,
   Grid,
   InputLabel,
@@ -19,6 +17,7 @@ import {
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { ProductionEntryTable } from '../components/ProductionEntryTable';
@@ -40,6 +39,14 @@ import {
   todayIsoDate,
   uid
 } from '../lib/utils';
+import {
+  Card as UiCard,
+  CardContent as UiCardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '../components/ui/card';
+import { HeaderBadge, PageHeader } from '../components/ui/page-header';
 
 export function ProductionPage() {
   const { currentUser, settings } = useAppContext();
@@ -52,6 +59,10 @@ export function ProductionPage() {
   const [selectedBrandIds, setSelectedBrandIds] = useState<string[]>([]);
   const [activeBrandId, setActiveBrandId] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [shiftMenuOpen, setShiftMenuOpen] = useState(false);
+  const [brandsSearchOpen, setBrandsSearchOpen] = useState(false);
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
   const today = todayIsoDate();
 
   const userBatches = useMemo(
@@ -67,7 +78,6 @@ export function ProductionPage() {
     activeBrandId && selectedBrandIds.includes(activeBrandId)
       ? activeBrandId
       : selectedBrandIds[0] || '';
-
   const activeShift = shifts.find((shift) => shift.id === effectiveShiftId);
   const shiftLabels = getShiftLabels(activeShift);
   const activeBrand = brands.find((brand) => brand.id === effectiveBrandId);
@@ -84,13 +94,13 @@ export function ProductionPage() {
     );
   const isReadOnly = activeBatch?.status !== 'draft';
   const customFields = settings?.customFields ?? [];
+  const themeMode = settings?.themeMode ?? 'light';
 
   const activeProducts = products.filter((product) =>
     activeBrand?.productIds.includes(product.id)
   );
   const availableProducts = activeProducts.filter(
-    (product) =>
-      !activeBatch?.entries.some((entry) => entry.productId === product.id)
+    (product) => !activeBatch?.entries.some((entry) => entry.productId === product.id)
   );
   const summary = batchSummary(activeBatch?.entries ?? [], products, activeShift);
 
@@ -146,27 +156,84 @@ export function ProductionPage() {
     await appDb.batches.put(update(latest));
   }
 
+  function buildEntry(productId: string): EntryLine {
+    return {
+      id: uid('line'),
+      productId,
+      hourValues: emptyHourValues(shiftLabels.length),
+      hourNotes: emptyHourNotes(shiftLabels.length),
+      customFieldValues: Object.fromEntries(customFields.map((field) => [field.id, '']))
+    };
+  }
+
+  async function quickSaveDraft() {
+    if (!effectiveBrandId) {
+      setError('اختر براند أولاً قبل الحفظ السريع.');
+      return;
+    }
+
+    const draft = activeBatch?.status === 'draft' ? activeBatch : await ensureDraft(effectiveBrandId);
+    await appDb.batches.update(draft.id, { lastUpdatedAt: nowIso() });
+    setError(null);
+    setMessage('تم الحفظ السريع للمسودة. اختصار لوحة المفاتيح: Ctrl+S');
+  }
+
   async function addProduct(product: ProductDefinition | null) {
     if (!product || !effectiveBrandId) {
       return;
     }
 
     const draft = await ensureDraft(effectiveBrandId);
-    const line: EntryLine = {
-      id: uid('line'),
-      productId: product.id,
-      hourValues: emptyHourValues(shiftLabels.length),
-      hourNotes: emptyHourNotes(shiftLabels.length),
-      customFieldValues: Object.fromEntries(
-        customFields.map((field) => [field.id, ''])
-      )
-    };
+    if (draft.entries.some((entry) => entry.productId === product.id)) {
+      setError(`الصنف ${product.name} موجود بالفعل داخل الجدول.`);
+      return;
+    }
 
     await appDb.batches.put({
       ...draft,
-      entries: [...draft.entries, line],
+      entries: [...draft.entries, buildEntry(product.id)],
       lastUpdatedAt: nowIso()
     });
+    setError(null);
+  }
+
+  async function assignProduct(entryId: string | null, productId: string) {
+    if (!effectiveBrandId) {
+      return;
+    }
+
+    const product = activeProducts.find((item) => item.id === productId);
+    if (!product) {
+      return;
+    }
+
+    const draft = await ensureDraft(effectiveBrandId);
+    const duplicated = draft.entries.find(
+      (entry) => entry.productId === productId && entry.id !== entryId
+    );
+    if (duplicated) {
+      setError(`الصنف ${product.name} موجود بالفعل، اختر صنفًا آخر.`);
+      return;
+    }
+
+    if (!entryId) {
+      await appDb.batches.put({
+        ...draft,
+        entries: [...draft.entries, buildEntry(productId)],
+        lastUpdatedAt: nowIso()
+      });
+      setError(null);
+      return;
+    }
+
+    await appDb.batches.put({
+      ...draft,
+      entries: draft.entries.map((entry) =>
+        entry.id === entryId ? { ...entry, productId } : entry
+      ),
+      lastUpdatedAt: nowIso()
+    });
+    setError(null);
   }
 
   async function updateEntry(
@@ -202,16 +269,12 @@ export function ProductionPage() {
       lastUpdatedAt: nowIso()
     }));
 
-    if (settings?.soundEnabled) {
+    if (settings?.soundEnabled && !note) {
       playInputTone();
     }
   }
 
-  async function updateCustomField(
-    entryId: string,
-    fieldId: string,
-    rawValue: string
-  ) {
+  async function updateCustomField(entryId: string, fieldId: string, rawValue: string) {
     await mutateBatch((batch) => ({
       ...batch,
       entries: batch.entries.map((entry) =>
@@ -225,42 +288,6 @@ export function ProductionPage() {
             }
           : entry
       ),
-      lastUpdatedAt: nowIso()
-    }));
-  }
-
-  async function pasteHours(
-    entryId: string,
-    startHourIndex: number,
-    text: string
-  ) {
-    const cells = text
-      .trim()
-      .split(/\t|\r?\n/)
-      .map((item) => {
-        const parsed = Number(item.trim() || 0);
-        return Number.isFinite(parsed) ? parsed : 0;
-      });
-
-    await mutateBatch((batch) => ({
-      ...batch,
-      entries: batch.entries.map((entry) => {
-        if (entry.id !== entryId) {
-          return entry;
-        }
-
-        const nextValues = [...entry.hourValues];
-        cells.forEach((cell, cellIndex) => {
-          if (startHourIndex + cellIndex < nextValues.length) {
-            nextValues[startHourIndex + cellIndex] = cell;
-          }
-        });
-
-        return {
-          ...entry,
-          hourValues: nextValues
-        };
-      }),
       lastUpdatedAt: nowIso()
     }));
   }
@@ -304,62 +331,166 @@ export function ProductionPage() {
     );
   }
 
+  useHotkeys(
+    'ctrl+s',
+    (event) => {
+      event.preventDefault();
+      void quickSaveDraft();
+    },
+    { enableOnFormTags: true },
+    [quickSaveDraft]
+  );
+
+  useHotkeys(
+    'alt+w',
+    (event) => {
+      event.preventDefault();
+      setShiftMenuOpen(true);
+    },
+    { enableOnFormTags: true },
+    []
+  );
+
+  useHotkeys(
+    'alt+b',
+    (event) => {
+      event.preventDefault();
+      setBrandsSearchOpen(true);
+      window.setTimeout(() => {
+        document.getElementById('brand-picker-input')?.focus();
+      }, 0);
+    },
+    { enableOnFormTags: true },
+    []
+  );
+
+  useHotkeys(
+    'alt+p',
+    (event) => {
+      event.preventDefault();
+      setProductSearchOpen(true);
+      window.setTimeout(() => {
+        document.getElementById('product-picker-input')?.focus();
+      }, 0);
+    },
+    { enableOnFormTags: true },
+    []
+  );
+
   return (
     <Stack spacing={3}>
-      <Typography variant="h4">إدخال الإنتاج</Typography>
-      {message ? <Alert severity="success">{message}</Alert> : null}
+      <PageHeader
+        title="وحدة إدخال البيانات"
+        description="واجهة Excel-like مبنية على AG Grid مع بحث حي للأصناف، صفوف مستمرة، واختصارات لوحة مفاتيح للحفظ والتنقل السريع."
+        actions={
+          <>
+            <HeaderBadge>Ctrl+S حفظ سريع</HeaderBadge>
+            <HeaderBadge>Alt+W الوردية</HeaderBadge>
+            <HeaderBadge>Alt+B البراند</HeaderBadge>
+            <HeaderBadge>Alt+P إضافة صنف</HeaderBadge>
+          </>
+        }
+      />
 
-      <Card>
-        <CardContent>
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 3 }}>
-              <FormControl fullWidth>
-                <InputLabel id="shift-select">الوردية</InputLabel>
-                <Select
-                  labelId="shift-select"
-                  label="الوردية"
-                  value={effectiveShiftId}
-                  onChange={(event) => setSelectedShiftId(event.target.value)}
-                >
-                  {shifts.map((shift) => (
-                    <MenuItem key={shift.id} value={shift.id}>
-                      {shift.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12, md: 9 }}>
-              <Autocomplete
-                multiple
-                options={brands}
-                getOptionLabel={(option: BrandDefinition) => option.name}
-                value={brands.filter((brand) => selectedBrandIds.includes(brand.id))}
-                onChange={async (_, newValue) => {
-                  setSelectedBrandIds(newValue.map((item) => item.id));
-                  if (newValue[0]) {
-                    setActiveBrandId(newValue[0].id);
-                    await ensureDraft(newValue[0].id);
-                  } else {
-                    setActiveBrandId('');
-                  }
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="البراندات"
-                    placeholder="اختر البراندات"
+      {message ? <Alert severity="success">{message}</Alert> : null}
+      {error ? <Alert severity="error">{error}</Alert> : null}
+
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, xl: 8 }}>
+          <UiCard>
+            <CardHeader>
+              <CardTitle>تهيئة الجلسة الحالية</CardTitle>
+              <CardDescription>
+                استخدم الاختصارات أو القوائم المباشرة لتجهيز الوردية والبراند قبل الدخول إلى الجدول.
+              </CardDescription>
+            </CardHeader>
+            <UiCardContent>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <FormControl fullWidth>
+                    <InputLabel id="shift-select">الوردية</InputLabel>
+                    <Select
+                      open={shiftMenuOpen}
+                      onClose={() => setShiftMenuOpen(false)}
+                      onOpen={() => setShiftMenuOpen(true)}
+                      labelId="shift-select"
+                      label="الوردية"
+                      value={effectiveShiftId}
+                      onChange={(event) => {
+                        setSelectedShiftId(event.target.value);
+                        setShiftMenuOpen(false);
+                      }}
+                    >
+                      {shifts.map((shift) => (
+                        <MenuItem key={shift.id} value={shift.id}>
+                          {shift.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid size={{ xs: 12, md: 8 }}>
+                  <Autocomplete
+                    multiple
+                    open={brandsSearchOpen}
+                    onOpen={() => setBrandsSearchOpen(true)}
+                    onClose={() => setBrandsSearchOpen(false)}
+                    options={brands}
+                    getOptionLabel={(option: BrandDefinition) => option.name}
+                    value={brands.filter((brand) => selectedBrandIds.includes(brand.id))}
+                    onChange={async (_, newValue) => {
+                      setSelectedBrandIds(newValue.map((item) => item.id));
+                      if (newValue[0]) {
+                        setActiveBrandId(newValue[0].id);
+                        await ensureDraft(newValue[0].id);
+                      } else {
+                        setActiveBrandId('');
+                      }
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="البراندات"
+                        placeholder="ابحث واختر البراندات"
+                        inputProps={{
+                          ...params.inputProps,
+                          id: 'brand-picker-input'
+                        }}
+                      />
+                    )}
                   />
-                )}
-              />
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+                </Grid>
+              </Grid>
+            </UiCardContent>
+          </UiCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, xl: 4 }}>
+          <UiCard className="h-full">
+            <CardHeader>
+              <CardTitle>اختصارات وسرعة</CardTitle>
+              <CardDescription>
+                الأسهم للتنقل داخل AG Grid، و Enter لإكمال التحرير والنزول للسطر التالي.
+              </CardDescription>
+            </CardHeader>
+            <UiCardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <span className="ag-shortcut-chip">Arrow Keys تنقل</span>
+                <span className="ag-shortcut-chip">Enter اعتماد الخلية</span>
+                <span className="ag-shortcut-chip">Ctrl+S حفظ فوري</span>
+                <span className="ag-shortcut-chip">Alt+B فتح البراندات</span>
+              </div>
+              <Typography variant="body2" color="text.secondary">
+                الجدول يدعم صفوفًا فارغة مستمرة، واختيار الصنف من داخل الخلية مباشرة.
+              </Typography>
+            </UiCardContent>
+          </UiCard>
+        </Grid>
+      </Grid>
 
       {selectedBrandIds.length > 0 ? (
-        <Card>
-          <CardContent>
+        <UiCard>
+          <UiCardContent className="pt-6">
             <Tabs
               value={activeBrandId}
               onChange={(_, value) => setActiveBrandId(value)}
@@ -368,43 +499,56 @@ export function ProductionPage() {
               {brands
                 .filter((brand) => selectedBrandIds.includes(brand.id))
                 .map((brand) => (
-                  <Tab
-                    key={brand.id}
-                    value={brand.id}
-                    label={`${brand.type === 'frozen' ? '❄' : '🌿'} ${brand.name}`}
-                  />
+                  <Tab key={brand.id} value={brand.id} label={brand.name} />
                 ))}
             </Tabs>
-          </CardContent>
-        </Card>
+          </UiCardContent>
+        </UiCard>
       ) : null}
 
       {activeBrand ? (
         <Stack spacing={2}>
-          <Card>
-            <CardContent>
+          <UiCard>
+            <CardHeader>
+              <CardTitle>أدوات التشغيل السريع</CardTitle>
+              <CardDescription>
+                أضف صنفًا يدويًا من الأعلى أو اختره مباشرة من خلية اسم الصنف داخل الجدول.
+              </CardDescription>
+            </CardHeader>
+            <UiCardContent>
               <Stack
-                direction={{ xs: 'column', lg: 'row' }}
+                direction={{ xs: 'column', xl: 'row' }}
                 spacing={2}
-                alignItems={{ lg: 'center' }}
+                alignItems={{ xl: 'center' }}
               >
                 <Autocomplete
                   sx={{ flex: 1 }}
+                  open={productSearchOpen}
+                  onOpen={() => setProductSearchOpen(true)}
+                  onClose={() => setProductSearchOpen(false)}
                   options={availableProducts}
                   getOptionLabel={(option) => `${option.name} - ${option.code}`}
                   onChange={(_, value) => {
                     void addProduct(value);
                   }}
                   renderInput={(params) => (
-                    <TextField {...params} label="إضافة منتج" />
+                    <TextField
+                      {...params}
+                      label="إضافة صنف سريع"
+                      placeholder="Alt+P"
+                      inputProps={{
+                        ...params.inputProps,
+                        id: 'product-picker-input'
+                      }}
+                    />
                   )}
                 />
                 <Button
                   variant="outlined"
                   startIcon={<SaveRoundedIcon />}
-                  onClick={() =>
-                    setMessage('تم حفظ المسودة محلياً داخل قاعدة بيانات المتصفح.')
-                  }
+                  onClick={() => {
+                    void quickSaveDraft();
+                  }}
                 >
                   حفظ مسودة
                 </Button>
@@ -412,11 +556,7 @@ export function ProductionPage() {
                   variant="contained"
                   color="secondary"
                   startIcon={<SendRoundedIcon />}
-                  disabled={
-                    !activeBatch ||
-                    activeBatch.entries.length === 0 ||
-                    activeBatch.status !== 'draft'
-                  }
+                  disabled={!activeBatch || activeBatch.entries.length === 0 || activeBatch.status !== 'draft'}
                   onClick={async () => {
                     if (activeBatch) {
                       await submitBatch(activeBatch);
@@ -445,65 +585,68 @@ export function ProductionPage() {
                   اعتماد الكل
                 </Button>
               </Stack>
-            </CardContent>
-          </Card>
+            </UiCardContent>
+          </UiCard>
 
-          <Card>
-            <CardContent>
-              <Stack spacing={2}>
-                <Typography variant="h6">
-                  شبكة إدخال الإنتاج المبنية على TanStack Table - {activeBrand.name}
-                </Typography>
-                {customFields.length > 0 ? (
-                  <Alert severity="info">
-                    تم تفعيل {customFields.length} حقل إضافي، والحقول المعلّمة
-                    ستظهر في الإذن النهائي بعد الاعتماد.
-                  </Alert>
-                ) : null}
-                {activeBatch?.status && activeBatch.status !== 'draft' ? (
-                  <Alert severity="info">
-                    هذا البراند تم إرساله للاعتماد، لذا يظهر هنا للقراءة فقط.
-                  </Alert>
-                ) : null}
-                <ProductionEntryTable
-                  entries={activeBatch?.entries ?? []}
-                  products={products}
-                  shiftLabels={shiftLabels}
-                  isReadOnly={isReadOnly}
-                  customFields={customFields}
-                  perHourSummary={summary.perHour}
-                  totalPackages={summary.totalPackages}
-                  totalKg={summary.totalKg}
-                  onHourCommit={async ({ entryId, hourIndex, note, value }) => {
-                    await updateEntry(entryId, hourIndex, note, value);
-                  }}
-                  onCustomFieldCommit={updateCustomField}
-                  onPasteHours={pasteHours}
-                />
-              </Stack>
-            </CardContent>
-          </Card>
+          <UiCard>
+            <CardHeader>
+              <CardTitle>AG Grid - {activeBrand.name}</CardTitle>
+              <CardDescription>
+                إدخال جدولي حي مع اختيار صنف searchable، صفوف إضافية مستمرة، وملاحظات مرتبطة بالساعة المحددة.
+              </CardDescription>
+            </CardHeader>
+            <UiCardContent className="space-y-4">
+              {customFields.length > 0 ? (
+                <Alert severity="info">
+                  تم تفعيل {customFields.length} حقل إضافي، وستنتقل الحقول المعلّمة إلى الإذن النهائي
+                  بعد الاعتماد.
+                </Alert>
+              ) : null}
+              {activeBatch?.status && activeBatch.status !== 'draft' ? (
+                <Alert severity="info">
+                  هذا البراند تم إرساله للاعتماد، لذلك أصبحت شبكة الإدخال للقراءة فقط.
+                </Alert>
+              ) : null}
+              <ProductionEntryTable
+                entries={activeBatch?.entries ?? []}
+                products={activeProducts}
+                shiftLabels={shiftLabels}
+                isReadOnly={isReadOnly}
+                customFields={customFields}
+                perHourSummary={summary.perHour}
+                totalPackages={summary.totalPackages}
+                totalKg={summary.totalKg}
+                themeMode={themeMode}
+                onHourCommit={async ({ entryId, hourIndex, note, value }) => {
+                  await updateEntry(entryId, hourIndex, note, value);
+                }}
+                onCustomFieldCommit={updateCustomField}
+                onAssignProduct={assignProduct}
+              />
+            </UiCardContent>
+          </UiCard>
 
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                ملخص إنتاج كل ساعة
-              </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <UiCard>
+            <CardHeader>
+              <CardTitle>ملخص التشغيل المباشر</CardTitle>
+              <CardDescription>تحديث لحظي لإجمالي كل ساعة وإجمالي الدفعة كاملة.</CardDescription>
+            </CardHeader>
+            <UiCardContent>
+              <div className="flex flex-wrap gap-2">
                 {summary.perHour.map((value, index) => (
-                  <div className="metric-chip" key={`hour-total-${index}`}>
+                  <span className="ag-shortcut-chip" key={`hour-total-${index}`}>
                     {shiftLabels[index]}: {formatNumber(value)}
-                  </div>
+                  </span>
                 ))}
-                <div className="metric-chip">
+                <span className="ag-shortcut-chip">
                   الإجمالي: {formatNumber(summary.totalPackages)} عبوة
-                </div>
-                <div className="metric-chip">
-                  الإجمالي: {formatNumber(summary.totalKg)} كجم
-                </div>
-              </Stack>
-            </CardContent>
-          </Card>
+                </span>
+                <span className="ag-shortcut-chip">
+                  الوزن: {formatNumber(summary.totalKg)} كجم
+                </span>
+              </div>
+            </UiCardContent>
+          </UiCard>
         </Stack>
       ) : (
         <Alert severity="info">

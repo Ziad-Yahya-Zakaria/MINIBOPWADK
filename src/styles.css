@@ -1,3 +1,6 @@
+@import "tailwindcss";
+@custom-variant dark (&:where([data-theme-mode=dark], [data-theme-mode=dark] *));
+
 :root {
   font-family: Cairo, sans-serif;
 }
@@ -267,6 +270,99 @@ body {
   color: var(--app-text-soft);
   font-size: 13px;
   font-weight: 700;
+}
+
+.ag-grid-shell {
+  border-radius: 28px;
+  border: 1px solid var(--app-border);
+  overflow: hidden;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+}
+
+.ag-theme-quartz,
+.ag-theme-quartz-dark {
+  --ag-font-family: Cairo, sans-serif;
+  --ag-border-color: var(--app-border);
+  --ag-header-background-color: color-mix(in srgb, var(--app-primary-soft) 48%, var(--app-surface) 52%);
+  --ag-odd-row-background-color: color-mix(in srgb, var(--app-primary-soft) 18%, transparent);
+  --ag-row-hover-color: color-mix(in srgb, var(--app-primary-soft) 40%, transparent);
+  --ag-selected-row-background-color: color-mix(in srgb, var(--app-primary-soft) 56%, transparent);
+  --ag-background-color: var(--app-surface);
+  --ag-foreground-color: var(--app-text);
+  --ag-header-foreground-color: var(--app-text);
+  --ag-input-border-color: var(--app-border-strong);
+  --ag-range-selection-border-color: var(--app-primary);
+  --ag-alpine-active-color: var(--app-primary);
+  --ag-accent-color: var(--app-primary);
+  --ag-wrapper-border-radius: 0px;
+}
+
+.ag-theme-quartz .ag-root-wrapper,
+.ag-theme-quartz-dark .ag-root-wrapper {
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.ag-theme-quartz .ag-header,
+.ag-theme-quartz-dark .ag-header {
+  border-bottom-color: var(--app-border);
+}
+
+.ag-theme-quartz .ag-row-pinned,
+.ag-theme-quartz-dark .ag-row-pinned {
+  font-weight: 800;
+}
+
+.ag-product-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.ag-product-cell code {
+  color: var(--app-text-soft);
+  font-size: 12px;
+}
+
+.ag-hour-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ag-note-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--app-primary);
+  flex: 0 0 auto;
+}
+
+.ag-inline-editor {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 12px;
+  padding: 6px 10px;
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  font: inherit;
+}
+
+.ag-shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-surface) 68%, var(--app-primary-soft) 32%);
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 @media (max-width: 900px) {

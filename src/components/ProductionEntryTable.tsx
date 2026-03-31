@@ -1,26 +1,26 @@
-import { useMemo, useState } from 'react';
 import {
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-  Typography
-} from '@mui/material';
+  forwardRef,
+  useId,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
+import { Button, Chip, Stack, TextField, Typography } from '@mui/material';
 import StickyNote2OutlinedIcon from '@mui/icons-material/StickyNote2Outlined';
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef
-} from '@tanstack/react-table';
+import { AgGridReact } from 'ag-grid-react';
+import type {
+  CellFocusedEvent,
+  CellValueChangedEvent,
+  ColDef,
+  ICellEditorParams
+} from 'ag-grid-community';
 
-import type { CustomFieldDefinition, EntryLine, ProductDefinition } from '../lib/types';
-import { formatNumber, getCellIndex } from '../lib/utils';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-quartz.css';
+
+import type { CustomFieldDefinition, EntryLine, ProductDefinition, ThemeMode } from '../lib/types';
+import { formatNumber } from '../lib/utils';
 
 interface ProductionEntryTableProps {
   entries: EntryLine[];
@@ -31,6 +31,7 @@ interface ProductionEntryTableProps {
   perHourSummary: number[];
   totalPackages: number;
   totalKg: number;
+  themeMode: ThemeMode;
   onHourCommit: (params: {
     rowIndex: number;
     entryId: string;
@@ -39,188 +40,124 @@ interface ProductionEntryTableProps {
     value: string;
   }) => Promise<void>;
   onCustomFieldCommit: (entryId: string, fieldId: string, value: string) => Promise<void>;
-  onPasteHours: (entryId: string, startHourIndex: number, text: string) => Promise<void>;
+  onAssignProduct: (entryId: string | null, productId: string) => Promise<void>;
 }
 
-interface HourCellEditorProps {
-  entry: EntryLine;
-  rowIndex: number;
-  hourIndex: number;
-  hourCount: number;
-  label: string;
-  isReadOnly: boolean;
-  onCommit: ProductionEntryTableProps['onHourCommit'];
-  onPasteHours: ProductionEntryTableProps['onPasteHours'];
+type GridRowType = 'entry' | 'placeholder' | 'summary';
+
+interface GridRow {
+  id: string;
+  rowType: GridRowType;
+  entryId: string | null;
+  productId: string;
+  hourValues: number[];
+  hourNotes: string[];
+  customFieldValues: Record<string, string>;
 }
 
-interface CustomFieldEditorProps {
-  entry: EntryLine;
-  field: CustomFieldDefinition;
-  isReadOnly: boolean;
-  onCommit: ProductionEntryTableProps['onCustomFieldCommit'];
+interface ProductCellEditorParams extends ICellEditorParams<GridRow, string> {
+  products: ProductDefinition[];
+  selectedProductIds: string[];
 }
 
-function focusHourTarget(rowIndex: number, hourIndex: number) {
-  const target = document.querySelector<HTMLInputElement>(
-    `[data-cell="${getCellIndex(rowIndex, hourIndex)}"]`
-  );
-  target?.focus();
-  target?.select();
+const PLACEHOLDER_ROWS = 6;
+
+function productSearchLabel(product: ProductDefinition) {
+  return `${product.name} - ${product.code}`;
 }
 
-function HourCellEditor({
-  entry,
-  rowIndex,
-  hourIndex,
-  hourCount,
-  label,
-  isReadOnly,
-  onCommit,
-  onPasteHours
-}: HourCellEditorProps) {
-  const [value, setValue] = useState(String(entry.hourValues[hourIndex] ?? 0));
-  const [note, setNote] = useState(entry.hourNotes[hourIndex] ?? '');
-  const [noteDraft, setNoteDraft] = useState(entry.hourNotes[hourIndex] ?? '');
-  const [noteOpen, setNoteOpen] = useState(false);
-
-  async function commitQuantity() {
-    await onCommit({
-      rowIndex,
-      entryId: entry.id,
-      hourIndex,
-      note: false,
-      value
-    });
-  }
-
-  async function saveNote() {
-    setNote(noteDraft);
-    await onCommit({
-      rowIndex,
-      entryId: entry.id,
-      hourIndex,
-      note: true,
-      value: noteDraft
-    });
-    setNoteOpen(false);
-  }
-
-  const hasNote = note.trim().length > 0;
+function HourValueRenderer(props: { value: number; data?: GridRow; hourIndex?: number }) {
+  const hasNote =
+    typeof props.hourIndex === 'number' &&
+    !!props.data?.hourNotes?.[props.hourIndex]?.trim();
 
   return (
-    <>
-      <Stack spacing={0.75} className="grid-cell-stack">
+    <div className="ag-hour-cell">
+      <span>{props.value ? formatNumber(props.value) : ''}</span>
+      {hasNote ? <span className="ag-note-dot" /> : null}
+    </div>
+  );
+}
+
+function ProductCellRenderer(props: {
+  value: string;
+  data?: GridRow;
+  productsMap?: Map<string, ProductDefinition>;
+}) {
+  if (props.data?.rowType === 'summary') {
+    return <strong>الإجماليات</strong>;
+  }
+
+  if (props.data?.rowType === 'placeholder') {
+    return <span className="text-xs font-bold text-emerald-900/45 dark:text-emerald-50/45">ابحث عن صنف أو اكتب الكود</span>;
+  }
+
+  const product = props.productsMap?.get(props.value);
+  return (
+    <div className="ag-product-cell">
+      <span>{product?.name ?? '-'}</span>
+      <code>{product?.code ?? '-'}</code>
+    </div>
+  );
+}
+
+const ProductCellEditor = forwardRef<{ getValue: () => string; afterGuiAttached: () => void }, ProductCellEditorParams>(
+  function ProductCellEditor(props, ref) {
+    const listId = useId();
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const selectedProductIds = props.selectedProductIds.filter((id) => id !== props.value);
+    const options = useMemo(
+      () =>
+        props.products.filter(
+          (product) => !selectedProductIds.includes(product.id) || product.id === props.value
+        ),
+      [props.products, props.value, selectedProductIds]
+    );
+    const [value, setValue] = useState(() => {
+      const current = props.products.find((product) => product.id === props.value);
+      return current ? productSearchLabel(current) : '';
+    });
+
+    useImperativeHandle(ref, () => ({
+      getValue() {
+        const normalized = value.trim().toLowerCase();
+        const match = props.products.find((product) => {
+          const targets = [
+            product.name,
+            product.code,
+            productSearchLabel(product)
+          ].map((item) => item.trim().toLowerCase());
+          return targets.includes(normalized);
+        });
+        return match?.id ?? String(props.value ?? '');
+      },
+      afterGuiAttached() {
+        window.setTimeout(() => {
+          inputRef.current?.focus();
+          inputRef.current?.select();
+        }, 0);
+      }
+    }));
+
+    return (
+      <div className="w-full">
         <input
-          className="grid-cell-input"
-          type="number"
-          min="0"
-          inputMode="numeric"
+          ref={inputRef}
+          className="ag-inline-editor"
+          list={listId}
           value={value}
-          data-cell={getCellIndex(rowIndex, hourIndex)}
-          readOnly={isReadOnly}
-          aria-label={`كمية ${label}`}
+          placeholder="ابحث عن صنف..."
           onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowLeft' && hourIndex + 1 < hourCount) {
-              event.preventDefault();
-              focusHourTarget(rowIndex, hourIndex + 1);
-            }
-            if (event.key === 'ArrowRight' && hourIndex > 0) {
-              event.preventDefault();
-              focusHourTarget(rowIndex, hourIndex - 1);
-            }
-            if (event.key === 'ArrowDown') {
-              event.preventDefault();
-              focusHourTarget(rowIndex + 1, hourIndex);
-            }
-            if (event.key === 'ArrowUp' && rowIndex > 0) {
-              event.preventDefault();
-              focusHourTarget(rowIndex - 1, hourIndex);
-            }
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              void commitQuantity().then(() => focusHourTarget(rowIndex + 1, hourIndex));
-            }
-          }}
-          onPaste={async (event) => {
-            const text = event.clipboardData.getData('text');
-            if (!text.includes('\t') && !text.includes('\n')) {
-              return;
-            }
-            event.preventDefault();
-            await onPasteHours(entry.id, hourIndex, text);
-          }}
-          onBlur={() => {
-            void commitQuantity();
-          }}
         />
-        <div className="grid-cell-meta">
-          <button
-            type="button"
-            className={`grid-note-button${hasNote ? ' has-note' : ''}`}
-            disabled={isReadOnly}
-            onClick={() => setNoteOpen(true)}
-          >
-            <StickyNote2OutlinedIcon sx={{ fontSize: 16 }} />
-            ملاحظة
-            {hasNote ? <span className="grid-note-count">1</span> : null}
-          </button>
-          <span className="grid-unit-hint">{label}</span>
-        </div>
-      </Stack>
-
-      <Dialog open={noteOpen} onClose={() => setNoteOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{label}</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            multiline
-            minRows={4}
-            autoFocus
-            label="ملاحظات الخلية"
-            value={noteDraft}
-            onChange={(event) => setNoteDraft(event.target.value)}
-            sx={{ mt: 1 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNoteOpen(false)}>إغلاق</Button>
-          <Button variant="contained" onClick={() => void saveNote()}>
-            حفظ الملاحظة
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
-  );
-}
-
-function CustomFieldEditor({
-  entry,
-  field,
-  isReadOnly,
-  onCommit
-}: CustomFieldEditorProps) {
-  const [value, setValue] = useState(entry.customFieldValues?.[field.id] ?? '');
-
-  return (
-    <Stack spacing={0.75} className="grid-cell-stack">
-      <input
-        className="grid-cell-input"
-        type={field.kind === 'number' ? 'number' : 'text'}
-        value={value}
-        readOnly={isReadOnly}
-        placeholder={field.placeholder || field.label}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={() => {
-          void onCommit(entry.id, field.id, value);
-        }}
-      />
-      <span className="grid-unit-hint">
-        {field.unit || (field.showInFinalApproval ? 'يظهر بالإذن النهائي' : 'داخلي فقط')}
-      </span>
-    </Stack>
-  );
-}
+        <datalist id={listId}>
+          {options.map((product) => (
+            <option key={product.id} value={productSearchLabel(product)} />
+          ))}
+        </datalist>
+      </div>
+    );
+  }
+);
 
 export function ProductionEntryTable({
   entries,
@@ -231,165 +168,298 @@ export function ProductionEntryTable({
   perHourSummary,
   totalPackages,
   totalKg,
+  themeMode,
   onHourCommit,
   onCustomFieldCommit,
-  onPasteHours
+  onAssignProduct
 }: ProductionEntryTableProps) {
   const productsMap = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
     [products]
   );
+  const selectedProductIds = useMemo(() => entries.map((entry) => entry.productId), [entries]);
+  const [selectedNoteCell, setSelectedNoteCell] = useState<{
+    entryId: string;
+    hourIndex: number;
+    label: string;
+  } | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
 
-  const columns = useMemo<ColumnDef<EntryLine>[]>(
+  const rowData = useMemo<GridRow[]>(
     () => [
-      {
-        id: 'product',
-        header: 'المنتج',
-        footer: () => 'تجميع الساعة',
-        cell: ({ row }) => {
-          const product = productsMap.get(row.original.productId);
-          return (
-            <Stack spacing={0.5} sx={{ minWidth: 250 }}>
-              <Typography fontWeight={800}>{product?.name ?? '-'}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {product?.code ?? '-'} | وزن العبوة: {formatNumber(product?.packageWeightKg ?? 0)} كجم
-              </Typography>
-            </Stack>
-          );
-        }
-      },
-      ...customFields.map<ColumnDef<EntryLine>>((field) => ({
-        id: `custom-${field.id}`,
-        header: field.label,
-        footer: () => (field.showInFinalApproval ? 'يظهر بالإذن' : 'داخلي فقط'),
-        cell: ({ row }) => (
-          <CustomFieldEditor
-            key={`${row.original.id}:${field.id}:${row.original.customFieldValues?.[field.id] ?? ''}`}
-            entry={row.original}
-            field={field}
-            isReadOnly={isReadOnly}
-            onCommit={onCustomFieldCommit}
-          />
-        )
+      ...entries.map((entry) => ({
+        id: entry.id,
+        rowType: 'entry' as const,
+        entryId: entry.id,
+        productId: entry.productId,
+        hourValues: [...entry.hourValues],
+        hourNotes: [...entry.hourNotes],
+        customFieldValues: { ...(entry.customFieldValues ?? {}) }
       })),
-      ...shiftLabels.map<ColumnDef<EntryLine>>((label, hourIndex) => ({
-        id: `hour-${hourIndex}`,
-        header: label,
-        footer: () => formatNumber(perHourSummary[hourIndex] ?? 0),
-        cell: ({ row }) => (
-          <HourCellEditor
-            key={`${row.original.id}:${hourIndex}:${row.original.hourValues[hourIndex] ?? 0}:${row.original.hourNotes[hourIndex] ?? ''}`}
-            entry={row.original}
-            rowIndex={row.index}
-            hourIndex={hourIndex}
-            hourCount={shiftLabels.length}
-            label={label}
-            isReadOnly={isReadOnly}
-            onCommit={onHourCommit}
-            onPasteHours={onPasteHours}
-          />
-        )
-      })),
-      {
-        id: 'total-packages',
-        header: 'الإجمالي',
-        footer: () => `${formatNumber(totalPackages)} عبوة`,
-        cell: ({ row }) => {
-          const packages = row.original.hourValues.reduce(
-            (sum, current) => sum + Number(current || 0),
-            0
-          );
-          return <Typography fontWeight={800}>{formatNumber(packages)}</Typography>;
-        }
-      },
-      {
-        id: 'total-kg',
-        header: 'الكيلو',
-        footer: () => `${formatNumber(totalKg)} كجم`,
-        cell: ({ row }) => {
-          const product = productsMap.get(row.original.productId);
-          const packages = row.original.hourValues.reduce(
-            (sum, current) => sum + Number(current || 0),
-            0
-          );
-          return (
-            <Typography fontWeight={800}>
-              {formatNumber(packages * (product?.packageWeightKg ?? 0))}
-            </Typography>
-          );
-        }
-      }
+      ...Array.from({ length: PLACEHOLDER_ROWS }, (_, index) => ({
+        id: `placeholder-${index}`,
+        rowType: 'placeholder' as const,
+        entryId: null,
+        productId: '',
+        hourValues: Array.from({ length: shiftLabels.length }, () => 0),
+        hourNotes: Array.from({ length: shiftLabels.length }, () => ''),
+        customFieldValues: Object.fromEntries(customFields.map((field) => [field.id, '']))
+      }))
     ],
-    [
-      customFields,
-      isReadOnly,
-      onCustomFieldCommit,
-      onHourCommit,
-      onPasteHours,
-      perHourSummary,
-      productsMap,
-      shiftLabels,
-      totalKg,
-      totalPackages
-    ]
+    [customFields, entries, shiftLabels.length]
   );
 
-  // TanStack Table manages internal table factories that React Compiler flags conservatively.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
-    data: entries,
-    columns,
-    getCoreRowModel: getCoreRowModel()
-  });
+  const pinnedBottomRowData = useMemo<GridRow[]>(
+    () => [
+      {
+        id: 'summary-row',
+        rowType: 'summary',
+        entryId: null,
+        productId: '',
+        hourValues: perHourSummary,
+        hourNotes: Array.from({ length: shiftLabels.length }, () => ''),
+        customFieldValues: Object.fromEntries(customFields.map((field) => [field.id, '']))
+      }
+    ],
+    [customFields, perHourSummary, shiftLabels.length]
+  );
+
+  async function handleCellValueChanged(event: CellValueChangedEvent<GridRow>) {
+    const row = event.data;
+    const columnId = event.colDef.colId ?? '';
+    if (!row || row.rowType === 'summary') {
+      return;
+    }
+
+    if (columnId === 'productId') {
+      const nextProductId = String(event.newValue ?? '').trim();
+      if (!nextProductId || nextProductId === event.oldValue) {
+        return;
+      }
+      await onAssignProduct(row.entryId, nextProductId);
+      return;
+    }
+
+    if (row.rowType !== 'entry' || !row.entryId) {
+      return;
+    }
+
+    if (columnId.startsWith('hour-')) {
+      const hourIndex = Number(columnId.replace('hour-', ''));
+      const rowIndex = entries.findIndex((entry) => entry.id === row.entryId);
+      await onHourCommit({
+        rowIndex,
+        entryId: row.entryId,
+        hourIndex,
+        note: false,
+        value: String(event.newValue ?? 0)
+      });
+      return;
+    }
+
+    if (columnId.startsWith('custom-')) {
+      const fieldId = columnId.replace('custom-', '');
+      await onCustomFieldCommit(row.entryId, fieldId, String(event.newValue ?? ''));
+    }
+  }
+
+  async function saveSelectedNote() {
+    if (!selectedNoteCell) {
+      return;
+    }
+    const rowIndex = entries.findIndex((entry) => entry.id === selectedNoteCell.entryId);
+    await onHourCommit({
+      rowIndex,
+      entryId: selectedNoteCell.entryId,
+      hourIndex: selectedNoteCell.hourIndex,
+      note: true,
+      value: noteDraft
+    });
+  }
+
+  const columnDefs = useMemo<ColDef<GridRow>[]>(
+    () => [
+      {
+        headerName: 'اسم الصنف',
+        field: 'productId',
+        colId: 'productId',
+        pinned: 'left',
+        minWidth: 280,
+        flex: 1.5,
+        editable: !isReadOnly,
+        singleClickEdit: true,
+        cellEditor: ProductCellEditor as never,
+        cellEditorParams: {
+          products,
+          selectedProductIds
+        },
+        cellRenderer: ProductCellRenderer as never,
+        cellRendererParams: {
+          productsMap
+        }
+      },
+      ...customFields.map<ColDef<GridRow>>((field) => ({
+        headerName: field.label,
+        field: `customFieldValues.${field.id}`,
+        colId: `custom-${field.id}`,
+        minWidth: 170,
+        editable: (params) => !isReadOnly && params.data?.rowType === 'entry',
+        valueGetter: (params) => params.data?.customFieldValues?.[field.id] ?? '',
+        valueSetter: (params) => {
+          if (!params.data) {
+            return false;
+          }
+          params.data.customFieldValues[field.id] = String(params.newValue ?? '');
+          return true;
+        }
+      })),
+      ...shiftLabels.map<ColDef<GridRow>>((label, hourIndex) => ({
+        headerName: label,
+        field: `hourValues.${hourIndex}`,
+        colId: `hour-${hourIndex}`,
+        minWidth: 124,
+        maxWidth: 150,
+        editable: (params) =>
+          !isReadOnly &&
+          params.data?.rowType === 'entry' &&
+          Boolean(params.data.productId),
+        valueGetter: (params) => params.data?.hourValues?.[hourIndex] ?? 0,
+        valueSetter: (params) => {
+          if (!params.data) {
+            return false;
+          }
+          const parsed = Number(params.newValue ?? 0);
+          params.data.hourValues[hourIndex] = Number.isFinite(parsed) ? parsed : 0;
+          return true;
+        },
+        valueParser: (params) => {
+          const parsed = Number(params.newValue ?? 0);
+          return Number.isFinite(parsed) ? parsed : 0;
+        },
+        cellRenderer: HourValueRenderer as never,
+        cellRendererParams: {
+          hourIndex
+        }
+      })),
+      {
+        headerName: 'الإجمالي',
+        colId: 'total-packages',
+        pinned: 'right',
+        minWidth: 120,
+        valueGetter: (params) =>
+          params.data?.hourValues?.reduce((sum, value) => sum + Number(value || 0), 0) ?? 0,
+        valueFormatter: (params) => formatNumber(Number(params.value ?? 0))
+      },
+      {
+        headerName: 'الكيلو',
+        colId: 'total-kg',
+        pinned: 'right',
+        minWidth: 120,
+        valueGetter: (params) => {
+          const product = params.data ? productsMap.get(params.data.productId) : null;
+          const packages =
+            params.data?.hourValues?.reduce((sum, value) => sum + Number(value || 0), 0) ?? 0;
+          return packages * (product?.packageWeightKg ?? 0);
+        },
+        valueFormatter: (params) => formatNumber(Number(params.value ?? 0))
+      }
+    ],
+    [customFields, isReadOnly, products, productsMap, selectedProductIds, shiftLabels]
+  );
+
+  const defaultColDef = useMemo<ColDef<GridRow>>(
+    () => ({
+      sortable: false,
+      resizable: true,
+      suppressHeaderMenuButton: true,
+      editable: false
+    }),
+    []
+  );
+
+  const activeNoteLabel =
+    selectedNoteCell && entries.find((item) => item.id === selectedNoteCell.entryId)
+      ? `${productsMap.get(entries.find((item) => item.id === selectedNoteCell.entryId)?.productId ?? '')?.name ?? 'صنف'} - ${selectedNoteCell.label}`
+      : null;
 
   return (
-    <Box className="tanstack-grid-shell">
-      <table className="tanstack-grid">
-        <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id} data-sticky={header.column.id === 'product' ? 'start' : undefined}>
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} data-sticky={cell.column.id === 'product' ? 'start' : undefined}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          {table.getFooterGroups().map((footerGroup) => (
-            <tr key={footerGroup.id}>
-              {footerGroup.headers.map((header, index) => (
-                <td key={header.id} data-sticky={header.column.id === 'product' ? 'start' : undefined}>
-                  {index === 0 ? (
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                      <Typography fontWeight={800}>
-                        {flexRender(header.column.columnDef.footer, header.getContext())}
-                      </Typography>
-                      <Chip size="small" label={`عدد البنود: ${entries.length}`} />
-                    </Stack>
-                  ) : (
-                    flexRender(header.column.columnDef.footer, header.getContext())
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tfoot>
-      </table>
-    </Box>
+    <Stack spacing={2.5}>
+      <div className="ag-grid-shell">
+        <div className={themeMode === 'dark' ? 'ag-theme-quartz-dark' : 'ag-theme-quartz'} style={{ height: 560, width: '100%' }}>
+          <AgGridReact<GridRow>
+            rowData={rowData}
+            columnDefs={columnDefs}
+            defaultColDef={defaultColDef}
+            pinnedBottomRowData={pinnedBottomRowData}
+            stopEditingWhenCellsLoseFocus
+            singleClickEdit
+            enterNavigatesVertically
+            enterNavigatesVerticallyAfterEdit
+            undoRedoCellEditing
+            undoRedoCellEditingLimit={12}
+            getRowId={(params) => params.data.id}
+            suppressMovableColumns
+            onCellValueChanged={(event) => {
+              void handleCellValueChanged(event);
+            }}
+            onCellFocused={(event: CellFocusedEvent<GridRow>) => {
+              const row = event.api.getDisplayedRowAtIndex(event.rowIndex ?? -1)?.data;
+              const columnId =
+                typeof event.column === 'string' ? event.column : event.column?.getColId() ?? '';
+              if (!row || row.rowType !== 'entry' || !columnId.startsWith('hour-') || !row.entryId) {
+                return;
+              }
+              const hourIndex = Number(columnId.replace('hour-', ''));
+              setNoteDraft(row.hourNotes[hourIndex] ?? '');
+              setSelectedNoteCell({
+                entryId: row.entryId,
+                hourIndex,
+                label: shiftLabels[hourIndex] ?? 'ساعة'
+              });
+            }}
+          />
+        </div>
+      </div>
+
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip color="primary" variant="outlined" label={`الإجمالي: ${formatNumber(totalPackages)} عبوة`} />
+        <Chip color="secondary" variant="outlined" label={`الوزن: ${formatNumber(totalKg)} كجم`} />
+        <Chip variant="outlined" label={`الصفوف النشطة: ${entries.length}`} />
+      </Stack>
+
+      {selectedNoteCell ? (
+        <Stack spacing={1.5} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 4, p: 2.5, bgcolor: 'background.paper' }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <StickyNote2OutlinedIcon color="primary" />
+            <Typography variant="h6">ملاحظات الخلية المحددة</Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            {activeNoteLabel}
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            value={noteDraft}
+            onChange={(event) => setNoteDraft(event.target.value)}
+            placeholder="اكتب ملاحظة مرتبطة بهذه الساعة..."
+          />
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" onClick={() => void saveSelectedNote()}>
+              حفظ الملاحظة
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setSelectedNoteCell(null);
+                setNoteDraft('');
+              }}
+            >
+              إخفاء
+            </Button>
+          </Stack>
+        </Stack>
+      ) : null}
+    </Stack>
   );
 }
